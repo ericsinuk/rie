@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { supabase } from '../lib/supabase.js'
+import { auth } from '../lib/api.js'
+const supabase = { auth }
 
 const DEPARTMENTS = ['ENG', 'FSS', 'GOP', 'MGT', 'SAFE', 'ADMIN']
 
@@ -26,20 +27,10 @@ export default function AuthPage() {
     setLoading(true); setError('')
     const { error } = await supabase.auth.signUp({
       email, password,
-      options: {
-        data: { full_name: fullName },
-        emailRedirectTo: window.location.origin
-      }
+      options: { data: { full_name: fullName, department } }
     })
     if (error) { setError(error.message); setLoading(false); return }
-
-    // set department in app_metadata via service-role would need edge function
-    // for now store in profile after signup via trigger — update dept directly
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session) {
-      await supabase.from('profiles').update({ department, full_name: fullName }).eq('id', session.user.id)
-    }
-    setError('Check your email to confirm your account, then log in.')
+    // server creates profile with department + full_name on signup — user is now logged in
     setLoading(false)
   }
 

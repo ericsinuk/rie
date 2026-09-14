@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { acquireLock, releaseLock, subscribeLocks } from '../lib/locks.js'
+import { insertRunwaysBatch, signAssessment } from '../lib/api.js'
 import ApprovalWorkflow from './ApprovalWorkflow.jsx'
 import GenTab from './tabs/GenTab.jsx'
 import FopRunwayTab from './tabs/FopRunwayTab.jsx'
@@ -122,7 +123,7 @@ export default function AirfieldDetail({ airfield, profile, currentUser, onBack,
 
     await supabase.from('runways').delete().eq('airfield_id', airfield.id)
     if (runways.length > 0) {
-      await supabase.from('runways').insert(
+      await insertRunwaysBatch(
         runways.map((r, i) => ({ ...r, airfield_id: airfield.id, sort_order: i, id: undefined }))
       )
     }
@@ -162,9 +163,7 @@ export default function AirfieldDetail({ airfield, profile, currentUser, onBack,
     if (!hasLock) return
     const table = { FSS: 'fss_assessments', GOP: 'gop_assessments', SAFE: 'safety_assessments', ENG: 'eng_assessments', MGT: 'mgt_assessments' }[dept]
     if (!table) return
-    await supabase.from(table).update({
-      dfs_status: 4, signed_by: currentUser.id, signed_at: new Date().toISOString()
-    }).eq('airfield_id', airfield.id)
+    await signAssessment(table, airfield.id)
     showToast('Signed ✓')
     loadAll()
   }

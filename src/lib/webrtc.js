@@ -1,4 +1,4 @@
-import { supabase } from './supabase.js'
+import { api } from './api.js'
 
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -71,7 +71,7 @@ export class VoiceCall {
   }
 
   _subscribeSignals() {
-    this.channel = supabase.channel(`webrtc:${this.localUserId}`)
+    this.channel = api.channel(`webrtc:${this.localUserId}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'webrtc_signals',
         filter: `to_user=eq.${this.localUserId}`
@@ -85,7 +85,7 @@ export class VoiceCall {
   }
 
   async _sendSignal(type, payload) {
-    await supabase.from('webrtc_signals').insert({
+    await api.from('webrtc_signals').insert({
       from_user: this.localUserId,
       to_user: this.remoteUserId,
       signal_type: type,
@@ -109,13 +109,13 @@ export class VoiceCall {
   _cleanup() {
     if (this.localStream) this.localStream.getTracks().forEach(t => t.stop())
     if (this.pc) this.pc.close()
-    if (this.channel) supabase.removeChannel(this.channel)
+    if (this.channel) api.removeChannel(this.channel)
     this.pc = null; this.localStream = null; this.channel = null
   }
 }
 
 export function subscribeIncomingCalls(userId, onIncoming) {
-  return supabase.channel(`calls:${userId}`)
+  return api.channel(`calls:${userId}`)
     .on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'webrtc_signals',
       filter: `to_user=eq.${userId}`
