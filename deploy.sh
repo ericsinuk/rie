@@ -6,11 +6,9 @@ set -e
 REPO="https://github.com/trendsyncjourney-max/RisksAssessments.git"
 BRANCH="claude/gifted-rubin-mepxnb"
 APP_DIR="/var/www/rie"
-DB_USER="risks_app"
-DB_PASS="${DB_PASS:-Rie2024Secure!}"
-DB_NAME="risks_assessments"
 JWT_SECRET="DHL-RIE-$(openssl rand -hex 16)"
 PORT=5555
+DB_PATH="$APP_DIR/server/rie.db"
 
 echo "=== 1. Cloning / updating repo ==="
 if [ -d "$APP_DIR/.git" ]; then
@@ -23,24 +21,20 @@ else
   cd "$APP_DIR"
 fi
 
-echo "=== 2. Postgres setup ==="
-sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1 || \
-  sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';"
-sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1 || \
-  sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
-PGPASSWORD="$DB_PASS" psql -U "$DB_USER" -h localhost "$DB_NAME" -f server/schema.sql
-
-echo "=== 3. Server .env ==="
+echo "=== 2. Server .env ==="
 cat > server/.env << EOF
 PORT=$PORT
-DATABASE_URL=postgres://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME
+DB_PATH=$DB_PATH
 JWT_SECRET=$JWT_SECRET
 CORS_ORIGIN=https://dhl-audit.duckdns.org
 EOF
 
-echo "=== 4. Server deps + PM2 ==="
+echo "=== 3. Server deps + migrate ==="
 cd server && npm install --omit=dev
+node migrate.js
 cd ..
+
+echo "=== 4. PM2 ==="
 if pm2 list | grep -q rie-server; then
   pm2 restart rie-server
 else
@@ -54,13 +48,10 @@ npm run build
 
 echo "=== 6. Nginx config ==="
 NGINX_CONF="/etc/nginx/sites-available/default"
-# Find the actual config file if not default
 [ -f /etc/nginx/sites-available/dhl-audit ] && NGINX_CONF="/etc/nginx/sites-available/dhl-audit"
 [ -f /etc/nginx/sites-available/dhl-audit.conf ] && NGINX_CONF="/etc/nginx/sites-available/dhl-audit.conf"
 
-# Only add blocks if not already present
 if ! grep -q "location /rie/" "$NGINX_CONF"; then
-  # Insert before closing brace of server block
   cat >> "$NGINX_CONF" << 'NGINXEOF'
 
     location /rie/api/ {
@@ -89,4 +80,5 @@ echo ""
 echo "=== DONE ==="
 echo "App: https://dhl-audit.duckdns.org/rie/"
 echo "API: https://dhl-audit.duckdns.org/rie/api/"
+echo "DB:  $DB_PATH"
 echo "PM2: pm2 status"

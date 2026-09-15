@@ -1,10 +1,9 @@
-import pg from 'pg'
+import Database from 'better-sqlite3'
+import { resolve } from 'path'
 import 'dotenv/config'
 
-export const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL
-})
+const dbPath = resolve(process.env.DB_PATH || './rie.db')
+export const db = new Database(dbPath)
 
-export function q(text, params) {
-  return pool.query(text, params)
-}
+db.pragma('journal_mode = WAL')
+db.pragma('foreign_keys = ON')

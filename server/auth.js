@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
-import { q } from './db.js'
+import { db } from './db.js'
 
 const JWT_SECRET = process.env.JWT_SECRET
 const TOKEN_TTL = '7d'
@@ -11,10 +11,7 @@ export function signToken(user) {
 
 export function toSession(user) {
   const access_token = signToken(user)
-  return {
-    access_token,
-    user: { id: user.id, email: user.email }
-  }
+  return { access_token, user: { id: user.id, email: user.email } }
 }
 
 export async function hashPassword(pw) {
@@ -25,8 +22,6 @@ export async function verifyPassword(pw, hash) {
   return bcrypt.compare(pw, hash)
 }
 
-// Express middleware: verifies bearer token if present, attaches req.user. Does not reject
-// unauthenticated requests here — individual routes decide what needs a user.
 export function authMiddleware(req, _res, next) {
   const header = req.headers.authorization || ''
   const token = header.startsWith('Bearer ') ? header.slice(7) : null
@@ -52,12 +47,10 @@ export function verifyTokenForSocket(token) {
   }
 }
 
-export async function findUserByEmail(email) {
-  const { rows } = await q('select * from profiles where email = $1', [email])
-  return rows[0] || null
+export function findUserByEmail(email) {
+  return Promise.resolve(db.prepare('SELECT * FROM profiles WHERE email = ?').get(email) || null)
 }
 
-export async function findUserById(id) {
-  const { rows } = await q('select * from profiles where id = $1', [id])
-  return rows[0] || null
+export function findUserById(id) {
+  return Promise.resolve(db.prepare('SELECT * FROM profiles WHERE id = ?').get(id) || null)
 }
