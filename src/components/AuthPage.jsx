@@ -37,7 +37,8 @@ export default function AuthPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-logo">RisksAssessments</div>
+        <div className="auth-logo">RIE</div>
+        <div className="auth-sub">Rectification Interval Extension</div>
         <div className="auth-sub">DHL Cargo · Airfield Assessment System</div>
 
         {mode === 'login' ? (

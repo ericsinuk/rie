@@ -69,7 +69,7 @@ export default function Dashboard({ profile, onSelect, onSignOut }) {
   if (loading) return (
     <>
       <header className="app-header">
-        <h1>Risk Assessments</h1>
+        <h1>Rectification Interval Extensions</h1>
         <div className="header-right">
           <span className="dept-badge">{profile?.department}</span>
           <button className="header-btn" onClick={onSignOut}>Sign Out</button>
@@ -82,7 +82,7 @@ export default function Dashboard({ profile, onSelect, onSignOut }) {
   return (
     <>
       <header className="app-header">
-        <h1>Risk Assessments</h1>
+        <h1>Rectification Interval Extensions</h1>
         <div className="header-right">
           <span className="dept-badge">{profile?.department} — {profile?.full_name}</span>
           {canCreate && <button className="add-btn" onClick={() => setShowModal(true)}>+ New Airfield</button>}
