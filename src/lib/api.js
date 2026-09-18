@@ -346,12 +346,16 @@ export const api = {
   }
 }
 
-// Special: batch runway insert used in AirfieldDetail.handleSave
-export async function insertRunwaysBatch(rows) {
-  return apiFetch('/runways/batch', { method: 'POST', body: rows })
-}
-
-// Special: sign off a department assessment
-export async function signAssessment(table, airfield_id) {
-  return apiFetch(`/assessments/${table}/sign`, { method: 'POST', body: { airfield_id } })
+// ---------------------------------------------------------------------------
+// RIE records
+// ---------------------------------------------------------------------------
+export const rie = {
+  list: () => apiFetch('/rie'),
+  get: (id) => apiFetch(`/rie/${id}`),
+  create: (body) => apiFetch('/rie', { method: 'POST', body }),
+  update: (id, body) => apiFetch(`/rie/${id}`, { method: 'PATCH', body }),
+  sign: (id, role, signature, name) =>
+    apiFetch(`/rie/${id}/sign`, { method: 'POST', body: { role, signature, name } }),
+  markFoi: (id) => apiFetch(`/rie/${id}/foi`, { method: 'POST' }),
+  close: (id) => apiFetch(`/rie/${id}/close`, { method: 'POST' }),
 }

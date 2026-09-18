@@ -1,159 +1,153 @@
 import { useState, useEffect } from 'react'
+import { rie } from '../lib/api.js'
 import { supabase } from '../lib/supabase.js'
 
-const DEPT_LABELS = { FSS: 'FOP', GOP: 'GOP', SAFE: 'Safety', ENG: 'ENG', MGT: 'MGT' }
-const STATUS_OPTIONS = ['Assessment Completed', 'Assessment Terminated', 'In Progress', 'CATB', 'ENG', 'Safety']
-const OPS_OPTIONS = ['Destination Airfield', 'Destination Alternate', 'ETOPS Alternate', 'En Route Alternate', 'Emergency Alternate']
+const MEL_DAYS = { B: 3, C: 10, D: 120 }
 
-function statusClass(s) {
-  if (s === 'Assessment Completed') return 'completed'
-  if (s === 'ENG') return 'eng'
-  if (s === 'Safety') return 'safety'
-  if (s === 'CATB') return 'catb'
-  return 'progress'
+const STATUS_FILTERS = ['All', 'Draft', 'Pending Manager', 'Authorised', 'Submitted to FOI', 'Closed', 'Overdue']
+
+function daysUntil(isoDate) {
+  if (!isoDate) return null
+  const diff = new Date(isoDate) - new Date()
+  return Math.ceil(diff / 86400000)
 }
 
-function dfsLabel(n) {
-  if (n >= 5) return 'Submitted'
-  if (n >= 4) return 'Signed'
-  if (n >= 3) return 'Synced'
-  if (n >= 2) return 'TBS'
-  return 'Pending'
+function fmtDate(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-export default function Dashboard({ profile, onSelect, onSignOut }) {
-  const [airfields, setAirfields] = useState([])
+function statusBadge(rec) {
+  const isOverdue = rec.extension_expiry && new Date(rec.extension_expiry) < new Date()
+  if (isOverdue && rec.status !== 'Closed') return <span className="badge badge-overdue">OVERDUE</span>
+  const map = {
+    Draft: 'badge-draft',
+    'Pending Manager': 'badge-pending',
+    Authorised: 'badge-auth',
+    'Submitted to FOI': 'badge-foi',
+    Closed: 'badge-closed',
+  }
+  return <span className={`badge ${map[rec.status] || 'badge-draft'}`}>{rec.status}</span>
+}
+
+function catBadge(cat) {
+  return <span className={`badge badge-cat${cat}`}>{cat} · {MEL_DAYS[cat]}d</span>
+}
+
+function ExpiryCell({ date }) {
+  const days = daysUntil(date)
+  if (days === null) return <span className="expiry-ok">—</span>
+  if (days < 0) return <span className="expiry-over">{fmtDate(date)} ({Math.abs(days)}d overdue)</span>
+  if (days <= 3) return <span className="expiry-warn">{fmtDate(date)} ({days}d left)</span>
+  return <span className="expiry-ok">{fmtDate(date)}</span>
+}
+
+export default function Dashboard({ onNew, onOpen }) {
+  const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({ icao: '', iata: '', name: '', country: '', operations_type: 'Destination Airfield' })
-  const [err, setErr] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [filter, setFilter] = useState('All')
 
   useEffect(() => {
-    loadAirfields()
-    const sub = supabase.channel('airfields-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'airfields' }, loadAirfields)
+    loadRecords()
+    const ch = supabase.channel('rie-dash')
+      .on('postgres_changes', { event: '*', filter: { table: 'rie_records' } }, () => loadRecords())
       .subscribe()
-    return () => supabase.removeChannel(sub)
+    return () => supabase.removeChannel(ch)
   }, [])
 
-  async function loadAirfields() {
-    const { data } = await supabase
-      .from('airfields')
-      .select(`*, fss_assessments(dfs_status), gop_assessments(dfs_status), safety_assessments(dfs_status), eng_assessments(dfs_status), mgt_assessments(dfs_status)`)
-      .order('created_at')
-    if (data) setAirfields(data)
+  async function loadRecords() {
+    const { data } = await rie.list()
+    if (data) setRecords(data)
     setLoading(false)
   }
 
-  async function handleCreate() {
-    if (!form.icao.trim()) { setErr('ICAO code required'); return }
-    if (!form.name.trim()) { setErr('Name required'); return }
-    setSaving(true); setErr('')
-    const { data, error } = await supabase.from('airfields').insert({
-      icao: form.icao.trim().toUpperCase(),
-      iata: form.iata.trim().toUpperCase() || null,
-      name: form.name.trim(),
-      country: form.country.trim(),
-      operations_type: form.operations_type
-    }).select().single()
-    setSaving(false)
-    if (error) { setErr(error.message); return }
-    setShowModal(false)
-    setForm({ icao: '', iata: '', name: '', country: '', operations_type: 'Destination Airfield' })
-    onSelect(data)
-  }
+  const filtered = records.filter(r => {
+    if (filter === 'All') return true
+    if (filter === 'Overdue') {
+      return r.extension_expiry && new Date(r.extension_expiry) < new Date() && r.status !== 'Closed'
+    }
+    return r.status === filter
+  })
 
-  const canCreate = ['ADMIN', 'FSS', 'MGT'].includes(profile?.department)
-
-  if (loading) return (
-    <>
-      <header className="app-header">
-        <h1>Rectification Interval Extensions</h1>
-        <div className="header-right">
-          <span className="dept-badge">{profile?.department}</span>
-          <button className="header-btn" onClick={onSignOut}>Sign Out</button>
-        </div>
-      </header>
-      <div className="loading">Loading airfields…</div>
-    </>
-  )
+  const counts = {}
+  STATUS_FILTERS.forEach(f => {
+    if (f === 'All') counts[f] = records.length
+    else if (f === 'Overdue') counts[f] = records.filter(r => r.extension_expiry && new Date(r.extension_expiry) < new Date() && r.status !== 'Closed').length
+    else counts[f] = records.filter(r => r.status === f).length
+  })
 
   return (
-    <>
-      <header className="app-header">
-        <h1>Rectification Interval Extensions</h1>
-        <div className="header-right">
-          <span className="dept-badge">{profile?.department} — {profile?.full_name}</span>
-          {canCreate && <button className="add-btn" onClick={() => setShowModal(true)}>+ New Airfield</button>}
-          <button className="header-btn" onClick={onSignOut}>Sign Out</button>
-        </div>
-      </header>
-
-      <div className="dashboard">
-        <div className="dashboard-title">Airfield Assessments</div>
-        <div className="dashboard-sub">{airfields.length} airfield{airfields.length !== 1 ? 's' : ''} tracked</div>
-
-        {airfields.length === 0 ? (
-          <div className="empty">No airfields yet. {canCreate ? 'Create one to get started.' : 'Waiting for an admin to add airfields.'}</div>
-        ) : (
-          <div className="airfield-grid">
-            {airfields.map(af => {
-              const depts = [
-                { label: 'FOP', val: af.fss_assessments?.[0]?.dfs_status || 0 },
-                { label: 'GOP', val: af.gop_assessments?.[0]?.dfs_status || 0 },
-                { label: 'Safety', val: af.safety_assessments?.[0]?.dfs_status || 0 },
-                { label: 'ENG', val: af.eng_assessments?.[0]?.dfs_status || 0 },
-                { label: 'MGT', val: af.mgt_assessments?.[0]?.dfs_status || 0 },
-              ]
-              return (
-                <div key={af.id} className="airfield-card" onClick={() => onSelect(af)}>
-                  <div className="card-top">
-                    <div className="card-codes">
-                      <span className="card-icao">{af.icao}</span>
-                      {af.iata && <span className="card-iata">{af.iata}</span>}
-                    </div>
-                    <span className={`status-badge ${statusClass(af.status)}`}>{af.status}</span>
-                  </div>
-                  <div className="card-name">{af.name}</div>
-                  <div className="card-country">{af.country} {af.operations_type && `· ${af.operations_type}`}</div>
-                  <div className="card-dfs">
-                    {depts.map(d => (
-                      <span key={d.label} className={`dfs-chip ${d.val >= 4 ? 'signed' : d.val >= 3 ? 'synced' : d.val >= 2 ? 'tbs' : ''}`}>
-                        {d.label}: {dfsLabel(d.val)}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+    <div className="page">
+      <div className="dash-toolbar">
+        <h1>RIE Records</h1>
+        <button className="btn btn-primary" onClick={onNew}>+ New RIE</button>
       </div>
 
-      {showModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal">
-            <h2>New Airfield</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="field"><label>ICAO Code *</label><input type="text" maxLength={4} value={form.icao} onChange={e => setForm(f => ({ ...f, icao: e.target.value }))} placeholder="e.g. EGLL" /></div>
-              <div className="field"><label>IATA Code</label><input type="text" maxLength={3} value={form.iata} onChange={e => setForm(f => ({ ...f, iata: e.target.value }))} placeholder="e.g. LHR" /></div>
-              <div className="field"><label>Name *</label><input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. London Heathrow" /></div>
-              <div className="field"><label>Country</label><input type="text" value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} placeholder="e.g. United Kingdom" /></div>
-              <div className="field"><label>Operations Type</label>
-                <select value={form.operations_type} onChange={e => setForm(f => ({ ...f, operations_type: e.target.value }))}>
-                  {OPS_OPTIONS.map(o => <option key={o}>{o}</option>)}
-                </select>
-              </div>
-              {err && <div className="auth-err">{err}</div>}
-            </div>
-            <div className="modal-actions">
-              <button className="cancel-btn" onClick={() => { setShowModal(false); setErr('') }}>Cancel</button>
-              <button className="confirm-btn" onClick={handleCreate} disabled={saving}>{saving ? 'Creating…' : 'Create'}</button>
-            </div>
+      <div className="filter-bar">
+        {STATUS_FILTERS.map(f => (
+          <button
+            key={f}
+            className={`filter-btn ${filter === f ? 'active' : ''}`}
+            onClick={() => setFilter(f)}
+          >
+            {f} {counts[f] > 0 ? `(${counts[f]})` : ''}
+          </button>
+        ))}
+      </div>
+
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>Loading…</div>
+        ) : filtered.length === 0 ? (
+          <div className="empty-state">
+            <div className="icon">📋</div>
+            <p>{filter === 'All' ? 'No RIE records yet. Click "+ New RIE" to create one.' : `No ${filter} records.`}</p>
           </div>
-        </div>
-      )}
-    </>
+        ) : (
+          <table className="rie-table">
+            <thead>
+              <tr>
+                <th>Ref</th>
+                <th>A/C Reg</th>
+                <th>MEL Item</th>
+                <th>Cat</th>
+                <th>Status</th>
+                <th>MEL Expiry</th>
+                <th>Ext. Expiry</th>
+                <th>FOI Due</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(r => {
+                const overdue = r.extension_expiry && new Date(r.extension_expiry) < new Date() && r.status !== 'Closed'
+                return (
+                  <tr
+                    key={r.id}
+                    className={overdue ? 'row-overdue' : ''}
+                    onClick={() => onOpen(r.id)}
+                  >
+                    <td className="ref">{r.ref_number}</td>
+                    <td className="mono">{r.aircraft_registration}</td>
+                    <td style={{ maxWidth: 180 }}>
+                      <div className="mono" style={{ fontSize: 12 }}>{r.mel_item_ref}</div>
+                      {r.mel_chapter_title && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{r.mel_chapter_title}</div>}
+                    </td>
+                    <td>{catBadge(r.mel_category)}</td>
+                    <td>{statusBadge(r)}</td>
+                    <td><ExpiryCell date={r.mel_interval_expiry} /></td>
+                    <td><ExpiryCell date={r.extension_expiry} /></td>
+                    <td>
+                      {r.foi_due_at
+                        ? <ExpiryCell date={r.foi_due_at} />
+                        : <span style={{ color: 'var(--text-3)' }}>—</span>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
   )
 }

@@ -219,6 +219,40 @@ CREATE TABLE IF NOT EXISTS webrtc_signals (
   payload     TEXT,
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+
+CREATE TABLE IF NOT EXISTS rie_records (
+  id                     TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random())%4+1,1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
+  ref_number             TEXT UNIQUE NOT NULL,
+  aircraft_registration  TEXT NOT NULL,
+  aircraft_type          TEXT NOT NULL,
+  mel_item_ref           TEXT NOT NULL,
+  mel_chapter_title      TEXT,
+  defect_description     TEXT NOT NULL,
+  mel_category           TEXT NOT NULL CHECK(mel_category IN ('B','C','D')),
+  date_defect_found      TEXT NOT NULL,
+  date_mel_start         TEXT NOT NULL,
+  mel_interval_expiry    TEXT NOT NULL,
+  extension_days         INTEGER NOT NULL DEFAULT 1,
+  extension_expiry       TEXT NOT NULL,
+  extension_reason       TEXT NOT NULL,
+  additional_limitations TEXT,
+  mcc_reference          TEXT,
+  status                 TEXT NOT NULL DEFAULT 'Draft'
+                           CHECK(status IN ('Draft','Pending Manager','Authorised','Submitted to FOI','Closed')),
+  applicant_id           TEXT REFERENCES profiles(id),
+  applicant_name         TEXT,
+  applicant_signed_at    TEXT,
+  applicant_signature    TEXT,
+  manager_id             TEXT REFERENCES profiles(id),
+  manager_name           TEXT,
+  manager_signed_at      TEXT,
+  manager_signature      TEXT,
+  foi_due_at             TEXT,
+  foi_submitted_at       TEXT,
+  created_by             TEXT NOT NULL REFERENCES profiles(id),
+  created_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
 `)
 
 console.log('Migration complete.')

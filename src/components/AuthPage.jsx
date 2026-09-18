@@ -1,23 +1,22 @@
 import { useState } from 'react'
 import { auth } from '../lib/api.js'
-const supabase = { auth }
 
-const DEPARTMENTS = ['ENG', 'FSS', 'GOP', 'MGT', 'SAFE', 'ADMIN']
+const ROLES = ['Engineer', 'Maintenance Manager', 'Flight Operations', 'Quality', 'Admin']
 
 export default function AuthPage() {
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
-  const [department, setDepartment] = useState('FSS')
+  const [department, setDepartment] = useState('Engineer')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   async function handleLogin(e) {
     e.preventDefault()
     setLoading(true); setError('')
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) setError(error.message)
+    const { error } = await auth.signInWithPassword({ email, password })
+    if (error) setError(error.message || 'Invalid credentials')
     setLoading(false)
   }
 
@@ -25,59 +24,56 @@ export default function AuthPage() {
     e.preventDefault()
     if (!fullName.trim()) { setError('Full name is required'); return }
     setLoading(true); setError('')
-    const { error } = await supabase.auth.signUp({
-      email, password,
-      options: { data: { full_name: fullName, department } }
-    })
-    if (error) { setError(error.message); setLoading(false); return }
-    // server creates profile with department + full_name on signup — user is now logged in
+    const { error } = await auth.signUp({ email, password, options: { data: { full_name: fullName, department } } })
+    if (error) { setError(error.message || 'Sign up failed'); setLoading(false); return }
     setLoading(false)
   }
 
   return (
-    <div className="auth-page">
+    <div className="auth-wrap">
       <div className="auth-card">
-        <div className="auth-logo">RIE</div>
-        <div className="auth-sub">Rectification Interval Extension</div>
-        <div className="auth-sub">DHL Cargo · Airfield Assessment System</div>
+        <div className="auth-logo">
+          <div className="dhl">DHL</div>
+          <div className="app">Rectification Interval Extension</div>
+        </div>
 
         {mode === 'login' ? (
-          <form className="auth-form" onSubmit={handleLogin}>
-            <div className="auth-field">
+          <form onSubmit={handleLogin}>
+            {error && <div className="auth-error">{error}</div>}
+            <div className="field">
               <label>Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="your@email.com" />
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="name@dhl.com" autoComplete="email" />
             </div>
-            <div className="auth-field">
+            <div className="field">
               <label>Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" autoComplete="current-password" />
             </div>
-            {error && <div className="auth-err">{error}</div>}
-            <button className="auth-submit" type="submit" disabled={loading}>
+            <button className="btn btn-primary" style={{ width: '100%', marginTop: 4 }} disabled={loading}>
               {loading ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
         ) : (
-          <form className="auth-form" onSubmit={handleSignup}>
-            <div className="auth-field">
+          <form onSubmit={handleSignup}>
+            {error && <div className="auth-error">{error}</div>}
+            <div className="field">
               <label>Full Name</label>
-              <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} required placeholder="John Smith" />
+              <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} required placeholder="John Smith" autoComplete="name" />
             </div>
-            <div className="auth-field">
+            <div className="field">
               <label>Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="your@email.com" />
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="name@dhl.com" autoComplete="email" />
             </div>
-            <div className="auth-field">
+            <div className="field">
               <label>Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="Min 6 characters" />
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="Min 6 characters" autoComplete="new-password" />
             </div>
-            <div className="auth-field">
-              <label>Department</label>
+            <div className="field">
+              <label>Role / Department</label>
               <select value={department} onChange={e => setDepartment(e.target.value)}>
-                {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
+                {ROLES.map(r => <option key={r}>{r}</option>)}
               </select>
             </div>
-            {error && <div className="auth-err">{error}</div>}
-            <button className="auth-submit" type="submit" disabled={loading}>
+            <button className="btn btn-primary" style={{ width: '100%', marginTop: 4 }} disabled={loading}>
               {loading ? 'Creating account…' : 'Create Account'}
             </button>
           </form>
@@ -85,9 +81,9 @@ export default function AuthPage() {
 
         <div className="auth-toggle">
           {mode === 'login' ? (
-            <>Don't have an account? <button onClick={() => { setMode('signup'); setError('') }}>Sign Up</button></>
+            <>No account? <button onClick={() => { setMode('signup'); setError('') }}>Register</button></>
           ) : (
-            <>Already have an account? <button onClick={() => { setMode('login'); setError('') }}>Sign In</button></>
+            <>Have an account? <button onClick={() => { setMode('login'); setError('') }}>Sign In</button></>
           )}
         </div>
       </div>

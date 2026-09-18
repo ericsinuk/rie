@@ -3,10 +3,9 @@
 # Usage: bash deploy.sh
 set -e
 
-REPO="https://github.com/trendsyncjourney-max/RisksAssessments.git"
-BRANCH="claude/gifted-rubin-mepxnb"
+REPO="https://github.com/ericsinuk/rie.git"
+BRANCH="main"
 APP_DIR="/var/www/rie"
-JWT_SECRET="DHL-RIE-$(openssl rand -hex 16)"
 PORT=5555
 DB_PATH="$APP_DIR/server/rie.db"
 
@@ -22,6 +21,11 @@ else
 fi
 
 echo "=== 2. Server .env ==="
+# Preserve existing JWT_SECRET if present, otherwise generate one
+EXISTING_SECRET=""
+[ -f server/.env ] && EXISTING_SECRET=$(grep ^JWT_SECRET server/.env | cut -d= -f2-)
+JWT_SECRET="${EXISTING_SECRET:-DHL-RIE-$(openssl rand -hex 16)}"
+
 cat > server/.env << EOF
 PORT=$PORT
 DB_PATH=$DB_PATH
@@ -46,13 +50,35 @@ echo "=== 5. Frontend build ==="
 npm install
 npm run build
 
-echo "=== 6. Nginx config ==="
-NGINX_CONF="/etc/nginx/sites-available/default"
+echo "=== 6. Caddy / Nginx config ==="
+# Try Caddy first (preferred on this VPS)
+CADDYFILE="/etc/caddy/Caddyfile"
+NGINX_CONF=""
 [ -f /etc/nginx/sites-available/dhl-audit ] && NGINX_CONF="/etc/nginx/sites-available/dhl-audit"
 [ -f /etc/nginx/sites-available/dhl-audit.conf ] && NGINX_CONF="/etc/nginx/sites-available/dhl-audit.conf"
+[ -f /etc/nginx/sites-available/default ] && [ -z "$NGINX_CONF" ] && NGINX_CONF="/etc/nginx/sites-available/default"
 
-if ! grep -q "location /rie/" "$NGINX_CONF"; then
-  cat >> "$NGINX_CONF" << 'NGINXEOF'
+if [ -f "$CADDYFILE" ]; then
+  if ! grep -q "handle /rie/api/" "$CADDYFILE"; then
+    cat >> "$CADDYFILE" << 'CADDYEOF'
+
+  handle /rie/api/* {
+    uri strip_prefix /rie/api
+    reverse_proxy localhost:5555
+  }
+
+  handle /rie/* {
+    root * /var/www/rie/dist
+    try_files {path} /rie/index.html
+    file_server
+  }
+CADDYEOF
+    echo "Caddy blocks added"
+  fi
+  caddy reload --config "$CADDYFILE" && echo "Caddy reloaded"
+elif [ -n "$NGINX_CONF" ]; then
+  if ! grep -q "location /rie/" "$NGINX_CONF"; then
+    cat >> "$NGINX_CONF" << 'NGINXEOF'
 
     location /rie/api/ {
         proxy_pass http://127.0.0.1:5555/;
@@ -69,12 +95,10 @@ if ! grep -q "location /rie/" "$NGINX_CONF"; then
         try_files $uri $uri/ /rie/index.html;
     }
 NGINXEOF
-  echo "Nginx blocks added to $NGINX_CONF"
-else
-  echo "Nginx blocks already present, skipping"
+    echo "Nginx blocks added to $NGINX_CONF"
+  fi
+  nginx -t && systemctl reload nginx
 fi
-
-nginx -t && systemctl reload nginx
 
 echo ""
 echo "=== DONE ==="

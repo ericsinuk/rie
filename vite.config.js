@@ -7,10 +7,10 @@ export default defineConfig({
   server: {
     allowedHosts: true,
     proxy: {
-      '/api': {
+      '/rie/api': {
         target: 'http://localhost:5555',
-        changeOrigin: true,
-        rewrite: path => path.replace(/^\/api/, '')
+        rewrite: path => path.replace(/^\/rie\/api/, ''),
+        ws: true,
       }
     }
   },
@@ -20,13 +20,14 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icons/*.png'],
       manifest: {
-        name: 'RIE Control',
+        name: 'RIE — Rectification Interval Extension',
         short_name: 'RIE',
-        description: 'DHL Cargo — Rectification Interval Extension Control System',
+        description: 'DHL Cargo MEL Rectification Interval Extension Management',
         theme_color: '#FFCC00',
-        background_color: '#1a1a1a',
+        background_color: '#0f0f0f',
         display: 'standalone',
         start_url: '/rie/',
+        scope: '/rie/',
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' }

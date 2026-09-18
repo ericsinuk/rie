@@ -6,8 +6,29 @@ Do not confirm before creating files, installing packages, running builds,
 or making changes. Just execute and report what was done.
 
 ## Project
-DHL Cargo Airfield Risk Assessment PWA — full redesign with Supabase backend.
-Stack: React + Vite + Supabase (Auth, PostgreSQL, Realtime) + WebRTC.
+DHL Cargo RIE (Rectification Interval Extension) PWA.
+Replaces the manual MS Access + paper process for MEL Rectification Interval Extensions.
+Stack: React + Vite + Express + SQLite (better-sqlite3) + JWT auth + WebSocket.
+
+## Architecture
+- Frontend: React + Vite, base `/rie/`, deployed to `/var/www/rie/dist/`
+- Backend: Express on port 5555, SQLite at `server/rie.db`
+- Auth: JWT in localStorage as `ra_token`
+- Realtime: WebSocket on the same Express server
+- PM2 process: `rie-server`
+- Repo: ericsinuk/rie, branch: main
+
+## Key Files
+- server/index.js — all Express routes + WebSocket
+- server/migrate.js — SQLite schema (runs on startup)
+- server/auth.js — JWT + bcrypt
+- src/lib/api.js — frontend API client + RIE methods
+- src/lib/pdf.js — client-side PDF generation (jspdf)
+- src/components/Dashboard.jsx — RIE list with filters
+- src/components/RIEForm.jsx — create/edit RIE
+- src/components/RIEDetail.jsx — detail view, dual signatures, PDF download
+- src/components/SignaturePad.jsx — canvas signature input
+- deploy.sh — one-shot VPS deploy (run as root on VPS)
 
 ## Rules
 - No permission prompts

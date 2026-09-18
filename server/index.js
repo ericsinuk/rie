@@ -270,6 +270,175 @@ app.post('/chat', mustAuth, (req, res) => {
 })
 
 // ---------------------------------------------------------------------------
+// RIE records
+// ---------------------------------------------------------------------------
+const MEL_INTERVALS = { B: 3, C: 10, D: 120 }
+
+function addDays(isoDate, days) {
+  const d = new Date(isoDate)
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split('T')[0]
+}
+
+function nextRefNumber() {
+  const year = new Date().getFullYear()
+  const prefix = `RIE-${year}-`
+  const row = db.prepare(`
+    SELECT COALESCE(MAX(CAST(SUBSTR(ref_number, LENGTH(?)+1) AS INTEGER)), 0) + 1 AS next
+    FROM rie_records WHERE ref_number LIKE ?
+  `).get(prefix, prefix + '%')
+  return `${prefix}${String(row.next).padStart(3, '0')}`
+}
+
+app.get('/rie', mustAuth, (_req, res) => {
+  const rows = db.prepare(`
+    SELECT r.*, p.full_name AS created_by_name
+    FROM rie_records r
+    LEFT JOIN profiles p ON p.id = r.created_by
+    ORDER BY r.created_at DESC
+  `).all()
+  res.json(rows)
+})
+
+app.post('/rie', mustAuth, (req, res) => {
+  const {
+    aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
+    defect_description, mel_category, date_defect_found, date_mel_start,
+    extension_days, extension_reason, additional_limitations, mcc_reference
+  } = req.body
+  if (!aircraft_registration || !aircraft_type || !mel_item_ref || !defect_description ||
+      !mel_category || !date_defect_found || !date_mel_start || !extension_days || !extension_reason)
+    return res.status(400).json({ error: 'Missing required fields' })
+  const mel_interval_expiry = addDays(date_mel_start, MEL_INTERVALS[mel_category])
+  const extension_expiry = addDays(mel_interval_expiry, Number(extension_days))
+  const ref_number = nextRefNumber()
+  const row = db.prepare(`
+    INSERT INTO rie_records
+      (ref_number, aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
+       defect_description, mel_category, date_defect_found, date_mel_start,
+       mel_interval_expiry, extension_days, extension_expiry,
+       extension_reason, additional_limitations, mcc_reference, created_by)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *
+  `).get(ref_number, aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title || null,
+         defect_description, mel_category, date_defect_found, date_mel_start,
+         mel_interval_expiry, Number(extension_days), extension_expiry,
+         extension_reason, additional_limitations || null, mcc_reference || null, req.user.id)
+  broadcast({ event: 'INSERT', table: 'rie_records', new: row })
+  res.json(row)
+})
+
+app.get('/rie/:id', mustAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM rie_records WHERE id = ?').get(req.params.id)
+  if (!row) return res.status(404).json({ error: 'Not found' })
+  res.json(row)
+})
+
+app.patch('/rie/:id', mustAuth, (req, res) => {
+  const existing = db.prepare('SELECT * FROM rie_records WHERE id = ?').get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'Not found' })
+  if (existing.status !== 'Draft') return res.status(403).json({ error: 'Can only edit Draft records' })
+
+  const {
+    aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
+    defect_description, mel_category, date_defect_found, date_mel_start,
+    extension_days, extension_reason, additional_limitations, mcc_reference
+  } = req.body
+
+  const cat = mel_category || existing.mel_category
+  const start = date_mel_start || existing.date_mel_start
+  const extDays = extension_days != null ? Number(extension_days) : existing.extension_days
+  const mel_interval_expiry = addDays(start, MEL_INTERVALS[cat])
+  const extension_expiry = addDays(mel_interval_expiry, extDays)
+
+  const row = db.prepare(`
+    UPDATE rie_records SET
+      aircraft_registration = COALESCE(?, aircraft_registration),
+      aircraft_type = COALESCE(?, aircraft_type),
+      mel_item_ref = COALESCE(?, mel_item_ref),
+      mel_chapter_title = COALESCE(?, mel_chapter_title),
+      defect_description = COALESCE(?, defect_description),
+      mel_category = ?, date_defect_found = COALESCE(?, date_defect_found),
+      date_mel_start = ?, mel_interval_expiry = ?, extension_days = ?, extension_expiry = ?,
+      extension_reason = COALESCE(?, extension_reason),
+      additional_limitations = COALESCE(?, additional_limitations),
+      mcc_reference = COALESCE(?, mcc_reference),
+      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+    WHERE id = ? RETURNING *
+  `).get(
+    aircraft_registration || null, aircraft_type || null, mel_item_ref || null,
+    mel_chapter_title || null, defect_description || null,
+    cat, date_defect_found || null,
+    start, mel_interval_expiry, extDays, extension_expiry,
+    extension_reason || null, additional_limitations || null, mcc_reference || null,
+    req.params.id
+  )
+  broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
+  res.json(row)
+})
+
+app.post('/rie/:id/sign', mustAuth, (req, res) => {
+  const { role, signature, name } = req.body
+  if (!['applicant', 'manager'].includes(role)) return res.status(400).json({ error: 'role must be applicant or manager' })
+  if (!signature) return res.status(400).json({ error: 'signature required' })
+
+  const existing = db.prepare('SELECT * FROM rie_records WHERE id = ?').get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'Not found' })
+
+  if (role === 'applicant') {
+    if (existing.status !== 'Draft') return res.status(403).json({ error: 'Already signed by applicant' })
+    const row = db.prepare(`
+      UPDATE rie_records SET
+        applicant_id = ?, applicant_name = ?, applicant_signed_at = ?,
+        applicant_signature = ?, status = 'Pending Manager',
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+      WHERE id = ? RETURNING *
+    `).get(req.user.id, name || req.user.email, new Date().toISOString(), signature, req.params.id)
+    broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
+    return res.json(row)
+  }
+
+  if (role === 'manager') {
+    if (existing.status !== 'Pending Manager') return res.status(403).json({ error: 'Applicant must sign first' })
+    const now = new Date().toISOString()
+    const foi_due_at = addDays(now.split('T')[0], 10)
+    const row = db.prepare(`
+      UPDATE rie_records SET
+        manager_id = ?, manager_name = ?, manager_signed_at = ?,
+        manager_signature = ?, status = 'Authorised',
+        foi_due_at = ?,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+      WHERE id = ? RETURNING *
+    `).get(req.user.id, name || req.user.email, now, signature, foi_due_at, req.params.id)
+    broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
+    return res.json(row)
+  }
+})
+
+app.post('/rie/:id/foi', mustAuth, (req, res) => {
+  const existing = db.prepare('SELECT * FROM rie_records WHERE id = ?').get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'Not found' })
+  if (existing.status !== 'Authorised') return res.status(403).json({ error: 'Must be Authorised first' })
+  const row = db.prepare(`
+    UPDATE rie_records SET
+      foi_submitted_at = ?, status = 'Submitted to FOI',
+      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+    WHERE id = ? RETURNING *
+  `).get(new Date().toISOString(), req.params.id)
+  broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
+  res.json(row)
+})
+
+app.post('/rie/:id/close', mustAuth, (req, res) => {
+  const row = db.prepare(`
+    UPDATE rie_records SET status = 'Closed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+    WHERE id = ? RETURNING *
+  `).get(req.params.id)
+  if (!row) return res.status(404).json({ error: 'Not found' })
+  broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
+  res.json(row)
+})
+
+// ---------------------------------------------------------------------------
 // WebRTC signals
 // ---------------------------------------------------------------------------
 app.post('/signals', mustAuth, (req, res) => {
