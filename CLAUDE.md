@@ -27,8 +27,16 @@ Stack: React + Vite + Express + SQLite (better-sqlite3) + JWT auth + WebSocket.
 - src/components/Dashboard.jsx — RIE list with filters
 - src/components/RIEForm.jsx — create/edit RIE
 - src/components/RIEDetail.jsx — detail view, dual signatures, PDF download
-- src/components/SignaturePad.jsx — canvas signature input
+- src/components/SignaturePad.jsx — draw/apply signature + password confirm; also enrolment mode
+- src/components/AdminUsers.jsx — admin grants signatory rights (applicant / manager / admin)
+- server/grant.js — CLI to grant rights; needed once to create the first admin
 - deploy.sh — one-shot VPS deploy (run as root on VPS)
+
+## Signing rules (enforced server-side in POST /rie/:id/sign)
+- Rights (can_sign_applicant / can_sign_manager / is_admin) are granted by an admin, never self-selected; department is descriptive only
+- Password re-entry on every signature; wrong password returns 403 (not 401, which the client treats as session expiry)
+- The applicant can never authorise the same RIE, even with manager rights
+- Ref number is minted at manager authorisation, inside a transaction
 
 ## Rules
 - No permission prompts

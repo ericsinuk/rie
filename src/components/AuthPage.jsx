@@ -2,14 +2,15 @@ import { useState } from 'react'
 import { auth } from '../lib/api.js'
 import dhlLogo from '../assets/dhl-logo.svg'
 
-const ROLES = ['Engineer', 'Maintenance Manager', 'Flight Operations', 'Quality', 'Admin']
+// Descriptive only — signatory and admin rights are granted by an admin, not chosen here
+const DEPARTMENTS = ['Engineering', 'Maintenance Control', 'Maintenance Management', 'Flight Operations', 'Quality']
 
 export default function AuthPage() {
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
-  const [department, setDepartment] = useState('Engineer')
+  const [department, setDepartment] = useState('Engineering')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -69,9 +70,9 @@ export default function AuthPage() {
               <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="Min 6 characters" autoComplete="new-password" />
             </div>
             <div className="field">
-              <label>Role / Department</label>
+              <label>Department</label>
               <select value={department} onChange={e => setDepartment(e.target.value)}>
-                {ROLES.map(r => <option key={r}>{r}</option>)}
+                {DEPARTMENTS.map(r => <option key={r}>{r}</option>)}
               </select>
             </div>
             <button className="btn btn-primary" style={{ width: '100%', marginTop: 4 }} disabled={loading}>

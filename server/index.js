@@ -53,10 +53,72 @@ app.post('/auth/signout', (_req, res) => res.json({ ok: true }))
 // ---------------------------------------------------------------------------
 // Profiles
 // ---------------------------------------------------------------------------
+function getProfile(id) {
+  return db.prepare('SELECT * FROM profiles WHERE id = ?').get(id)
+}
+
+// Never expose the password hash; the enrolled signature image only to its owner
+function publicProfile(row, viewerId) {
+  if (!row) return null
+  return {
+    id: row.id, email: row.email, full_name: row.full_name, department: row.department,
+    created_at: row.created_at,
+    is_admin: !!row.is_admin,
+    can_sign_applicant: !!row.can_sign_applicant,
+    can_sign_manager: !!row.can_sign_manager,
+    has_signature: !!row.signature_image,
+    signature_updated_at: row.signature_updated_at,
+    ...(row.id === viewerId ? { signature_image: row.signature_image } : {}),
+  }
+}
+
 app.get('/profiles/:id', mustAuth, (req, res) => {
-  const row = db.prepare('SELECT id, email, full_name, department, created_at FROM profiles WHERE id = ?').get(req.params.id)
+  const row = getProfile(req.params.id)
   if (!row) return res.status(404).json({ error: 'Not found' })
-  res.json(row)
+  res.json(publicProfile(row, req.user.id))
+})
+
+app.put('/profiles/me/signature', mustAuth, async (req, res) => {
+  const { signature, password } = req.body
+  if (!signature || !signature.startsWith('data:image/png;base64,')) return res.status(400).json({ error: 'A drawn signature is required' })
+  const me = getProfile(req.user.id)
+  if (!me) return res.status(401).json({ error: 'Unauthorized' })
+  if (!password || !(await verifyPassword(password, me.password_hash))) return res.status(403).json({ error: 'Password incorrect' })
+  const row = db.prepare(`
+    UPDATE profiles SET signature_image = ?, signature_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+    WHERE id = ? RETURNING *
+  `).get(signature, me.id)
+  res.json(publicProfile(row, me.id))
+})
+
+// ---------------------------------------------------------------------------
+// Admin — signatory rights are granted here, never self-selected
+// ---------------------------------------------------------------------------
+function mustAdmin(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' })
+  const me = getProfile(req.user.id)
+  if (!me?.is_admin) return res.status(403).json({ error: 'Admin only' })
+  next()
+}
+
+app.get('/admin/users', mustAdmin, (req, res) => {
+  const rows = db.prepare("SELECT * FROM profiles WHERE email != 'import@dhl.com' ORDER BY full_name COLLATE NOCASE").all()
+  res.json(rows.map(r => publicProfile(r, req.user.id)))
+})
+
+app.patch('/admin/users/:id', mustAdmin, (req, res) => {
+  const target = getProfile(req.params.id)
+  if (!target || target.email === 'import@dhl.com') return res.status(404).json({ error: 'Not found' })
+  const flags = ['is_admin', 'can_sign_applicant', 'can_sign_manager'].filter(f => f in req.body)
+  if (!flags.length) return res.status(400).json({ error: 'Nothing to update' })
+  if (req.body.is_admin === false && target.is_admin) {
+    const admins = db.prepare('SELECT COUNT(*) AS n FROM profiles WHERE is_admin = 1').get().n
+    if (admins <= 1) return res.status(400).json({ error: 'Cannot remove the last admin' })
+  }
+  const sets = flags.map(f => `${f} = ?`).join(', ')
+  const row = db.prepare(`UPDATE profiles SET ${sets} WHERE id = ? RETURNING *`)
+    .get(...flags.map(f => (req.body[f] ? 1 : 0)), target.id)
+  res.json(publicProfile(row, req.user.id))
 })
 
 app.patch('/profiles/:id', mustAuth, (req, res) => {
@@ -384,48 +446,70 @@ app.patch('/rie/:id', mustAuth, (req, res) => {
   res.json(row)
 })
 
-app.post('/rie/:id/sign', mustAuth, (req, res) => {
-  const { role, signature, name, position, manager_comments } = req.body
+app.post('/rie/:id/sign', mustAuth, async (req, res) => {
+  const { role, signature, use_enrolled, password, name, position, manager_comments } = req.body
   if (!['applicant', 'manager'].includes(role)) return res.status(400).json({ error: 'role must be applicant or manager' })
-  if (!signature) return res.status(400).json({ error: 'signature required' })
+
+  // Permissions come from the database, not the token, so a revoked right takes effect immediately
+  const me = getProfile(req.user.id)
+  if (!me) return res.status(401).json({ error: 'Unauthorized' })
+  if (role === 'applicant' && !me.can_sign_applicant) return res.status(403).json({ error: 'You are not authorised to sign as applicant' })
+  if (role === 'manager' && !me.can_sign_manager) return res.status(403).json({ error: 'You are not authorised to sign as authorising manager' })
+
+  // Re-entering the password ties the act of signing to something only the signatory knows
+  if (!password || !(await verifyPassword(password, me.password_hash))) return res.status(403).json({ error: 'Password incorrect' })
+
+  let sigImage, sigSource
+  if (use_enrolled) {
+    if (!me.signature_image) return res.status(400).json({ error: 'You have no saved signature — draw one instead' })
+    sigImage = me.signature_image; sigSource = 'enrolled'
+  } else {
+    if (!signature || !signature.startsWith('data:image/png;base64,')) return res.status(400).json({ error: 'signature required' })
+    sigImage = signature; sigSource = 'drawn'
+  }
 
   const existing = db.prepare('SELECT * FROM rie_records WHERE id = ?').get(req.params.id)
   if (!existing) return res.status(404).json({ error: 'Not found' })
+  const now = new Date().toISOString()
 
   if (role === 'applicant') {
     if (existing.status !== 'Draft') return res.status(403).json({ error: 'Already signed by applicant' })
     const row = db.prepare(`
       UPDATE rie_records SET
         applicant_id = ?, applicant_name = ?, applicant_position = ?,
-        applicant_signed_at = ?, applicant_signature = ?,
+        applicant_signed_at = ?, applicant_signature = ?, applicant_sig_source = ?,
         status = 'Pending Manager',
         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-      WHERE id = ? RETURNING *
-    `).get(req.user.id, name || req.user.email, position || null, new Date().toISOString(), signature, req.params.id)
+      WHERE id = ? AND status = 'Draft' RETURNING *
+    `).get(me.id, name || me.full_name || me.email, position || null, now, sigImage, sigSource, req.params.id)
+    if (!row) return res.status(409).json({ error: 'Record changed while signing — reload and try again' })
     broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
     return res.json(row)
   }
 
-  if (role === 'manager') {
-    if (existing.status !== 'Pending Manager') return res.status(403).json({ error: 'Applicant must sign first' })
-    const now = new Date().toISOString()
-    const foi_due_at = addDays(now.split('T')[0], 10)
-    // Assign CAA ref number only at authorisation — prevents gaps from cancelled drafts
+  if (existing.status !== 'Pending Manager') return res.status(403).json({ error: 'Applicant must sign first' })
+  if (existing.applicant_id === me.id) return res.status(403).json({ error: 'You signed this RIE as applicant — a different person must authorise it' })
+  const foi_due_at = addDays(now.split('T')[0], 10)
+
+  // Transaction so two managers authorising at once can't mint the same reference number
+  const authorise = db.transaction(() => {
     const ref_number = existing.ref_number || nextRefNumber()
-    const row = db.prepare(`
+    return db.prepare(`
       UPDATE rie_records SET
         ref_number = ?,
         manager_id = ?, manager_name = ?, manager_position = ?,
-        manager_signed_at = ?, manager_signature = ?,
+        manager_signed_at = ?, manager_signature = ?, manager_sig_source = ?,
         manager_comments = ?,
         status = 'Authorised', foi_due_at = ?,
         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-      WHERE id = ? RETURNING *
-    `).get(ref_number, req.user.id, name || req.user.email, position || null,
-           now, signature, manager_comments || null, foi_due_at, req.params.id)
-    broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
-    return res.json(row)
-  }
+      WHERE id = ? AND status = 'Pending Manager' RETURNING *
+    `).get(ref_number, me.id, name || me.full_name || me.email, position || null,
+           now, sigImage, sigSource, manager_comments || null, foi_due_at, req.params.id)
+  })
+  const row = authorise()
+  if (!row) return res.status(409).json({ error: 'Record changed while signing — reload and try again' })
+  broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
+  res.json(row)
 })
 
 app.post('/rie/:id/foi', mustAuth, (req, res) => {

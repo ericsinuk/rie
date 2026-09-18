@@ -275,6 +275,21 @@ for (const [col, def] of [
   }
 }
 
+// Signatory rights are granted by an admin, never self-selected — department is descriptive only
+const profileColumns = db.prepare('PRAGMA table_info(profiles)').all().map(c => c.name)
+for (const [col, def] of [
+  ['is_admin',             'INTEGER NOT NULL DEFAULT 0'],
+  ['can_sign_applicant',   'INTEGER NOT NULL DEFAULT 0'],
+  ['can_sign_manager',     'INTEGER NOT NULL DEFAULT 0'],
+  ['signature_image',      'TEXT'],
+  ['signature_updated_at', 'TEXT'],
+]) {
+  if (!profileColumns.includes(col)) {
+    db.prepare(`ALTER TABLE profiles ADD COLUMN ${col} ${def}`).run()
+    console.log(`Added column profiles.${col}`)
+  }
+}
+
 // Make ref_number nullable (was NOT NULL in early schema — assign only at authorisation)
 const refCol = db.prepare('PRAGMA table_info(rie_records)').all().find(c => c.name === 'ref_number')
 if (refCol && refCol.notnull === 1) {
@@ -351,6 +366,16 @@ if (refCol && refCol.notnull === 1) {
   })
   recreate()
   console.log(`Migration complete: ref_number is now nullable (${existingCount} rows migrated)`)
+}
+
+// Runs after the table recreation above so these columns aren't dropped by it
+// Records whether each signature was drawn at signing time or applied from the enrolled one
+const rieColumns2 = db.prepare('PRAGMA table_info(rie_records)').all().map(c => c.name)
+for (const col of ['applicant_sig_source', 'manager_sig_source']) {
+  if (!rieColumns2.includes(col)) {
+    db.prepare(`ALTER TABLE rie_records ADD COLUMN ${col} TEXT`).run()
+    console.log(`Added column rie_records.${col}`)
+  }
 }
 
 console.log('Migration complete.')

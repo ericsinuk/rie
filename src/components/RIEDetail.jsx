@@ -19,6 +19,12 @@ function daysUntil(iso) {
   return Math.ceil((new Date(iso) - new Date()) / 86400000)
 }
 
+// Legacy paper records have no source; only new e-signatures are labelled
+function SigSource({ source }) {
+  if (!source) return null
+  return <div className="sig-source">{source === 'enrolled' ? 'Saved signature applied · password confirmed' : 'Drawn at signing · password confirmed'}</div>
+}
+
 const TIMELINE_STEPS = [
   { key: 'draft',   label: 'Created',          statusMatch: () => true },
   { key: 'app',     label: 'Applicant Signed',  statusMatch: s => ['Pending Manager','Authorised','Submitted to FOI','Closed'].includes(s) },
@@ -49,12 +55,12 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
     setLoading(false)
   }
 
-  async function handleSign(dataUrl, name, position, managerComments) {
-    setError('')
-    const { data, error: err } = await rie.sign(id, signing, dataUrl, name, position, managerComments)
-    if (err) { setError(err.error || err.message || 'Sign failed'); return }
+  async function handleSign(body) {
+    const { data, error: err } = await rie.sign(id, { role: signing, ...body })
+    if (err) return err.error || err.message || 'Sign failed'
     setRec(data)
     setSigning(null)
+    return null
   }
 
   async function handleMarkFoi() {
@@ -220,15 +226,18 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
                 <div className="sig-name">{rec.applicant_name}</div>
                 {rec.applicant_position && <div className="sig-date">{rec.applicant_position}</div>}
                 <div className="sig-date">{fmtDt(rec.applicant_signed_at)}</div>
+                <SigSource source={rec.applicant_sig_source} />
               </>
             ) : (
               <div className="sig-pending">
                 <div style={{ marginBottom: 8 }}>Not yet signed</div>
-                {rec.status === 'Draft' && (
+                {rec.status === 'Draft' && (profile?.can_sign_applicant ? (
                   <button className="btn btn-primary btn-sm" onClick={() => setSigning('applicant')}>
                     Sign as Applicant
                   </button>
-                )}
+                ) : (
+                  <div className="sig-note">You are not authorised to sign as applicant</div>
+                ))}
               </div>
             )}
           </div>
@@ -246,15 +255,22 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
                 <div className="sig-name">{rec.manager_name}</div>
                 {rec.manager_position && <div className="sig-date">{rec.manager_position}</div>}
                 <div className="sig-date">{fmtDt(rec.manager_signed_at)}</div>
+                <SigSource source={rec.manager_sig_source} />
               </>
             ) : (
               <div className="sig-pending">
                 {rec.status === 'Pending Manager' ? (
                   <>
                     <div style={{ marginBottom: 8 }}>Awaiting manager authorisation</div>
-                    <button className="btn btn-primary btn-sm" onClick={() => setSigning('manager')}>
-                      Authorise as Manager
-                    </button>
+                    {rec.applicant_id === profile?.id ? (
+                      <div className="sig-note">You signed as applicant — a different manager must authorise</div>
+                    ) : profile?.can_sign_manager ? (
+                      <button className="btn btn-primary btn-sm" onClick={() => setSigning('manager')}>
+                        Authorise as Manager
+                      </button>
+                    ) : (
+                      <div className="sig-note">You are not authorised to sign as manager</div>
+                    )}
                   </>
                 ) : (
                   <div>Awaiting applicant signature first</div>
@@ -326,9 +342,8 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
       {/* Signature modal */}
       {signing && (
         <SignaturePad
-          role={signing}
-          signerName={profile?.full_name || ''}
-          signerPosition={profile?.department || ''}
+          mode={signing}
+          profile={profile}
           onSign={handleSign}
           onCancel={() => setSigning(null)}
         />

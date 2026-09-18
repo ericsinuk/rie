@@ -4,6 +4,9 @@ import AuthPage from './components/AuthPage.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import RIEForm from './components/RIEForm.jsx'
 import RIEDetail from './components/RIEDetail.jsx'
+import AdminUsers from './components/AdminUsers.jsx'
+import SignaturePad from './components/SignaturePad.jsx'
+import { profiles } from './lib/api.js'
 import dhlLogo from './assets/dhl-logo.svg'
 import './styles/index.css'
 
@@ -11,6 +14,7 @@ export default function App() {
   const [session, setSession] = useState(undefined)
   const [profile, setProfile] = useState(null)
   const [view, setView] = useState({ page: 'dashboard' })
+  const [enrolling, setEnrolling] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -26,9 +30,19 @@ export default function App() {
   }, [])
 
   async function loadProfile(userId) {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
+    const { data } = await profiles.get(userId)
     setProfile(data)
   }
+
+  async function saveSignature({ signature, password }) {
+    const { data, error } = await profiles.saveSignature(signature, password)
+    if (error) return error.error || 'Could not save signature'
+    setProfile(data)
+    setEnrolling(false)
+    return null
+  }
+
+  const canSign = profile?.can_sign_applicant || profile?.can_sign_manager
 
   async function handleSignOut() {
     setProfile(null)
@@ -49,6 +63,14 @@ export default function App() {
           <div className="subtitle">MEL Management System</div>
         </div>
         <div style={{ flex: 1 }} />
+        {profile?.is_admin && (
+          <button className="nav-btn" onClick={() => setView({ page: 'users' })}>Users</button>
+        )}
+        {canSign && (
+          <button className="nav-btn" onClick={() => setEnrolling(true)}>
+            My signature{!profile.has_signature && <span className="nav-dot" title="No saved signature yet" />}
+          </button>
+        )}
         {profile && (
           <button className="user-btn" onClick={handleSignOut} title="Sign out">
             {profile.full_name || profile.email}
@@ -78,6 +100,16 @@ export default function App() {
           onBack={() => setView({ page: 'detail', id: view.id })}
           onSaved={(id) => setView({ page: 'detail', id })}
         />
+      )}
+      {view.page === 'users' && profile?.is_admin && (
+        <AdminUsers
+          profile={profile}
+          onBack={() => setView({ page: 'dashboard' })}
+          onSelfChange={() => loadProfile(profile.id)}
+        />
+      )}
+      {enrolling && (
+        <SignaturePad mode="enrol" profile={profile} onSign={saveSignature} onCancel={() => setEnrolling(false)} />
       )}
       {view.page === 'detail' && (
         <RIEDetail

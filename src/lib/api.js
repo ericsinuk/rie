@@ -360,8 +360,19 @@ export const rie = {
   get: (id) => apiFetch(`/rie/${id}`),
   create: (body) => apiFetch('/rie', { method: 'POST', body }),
   update: (id, body) => apiFetch(`/rie/${id}`, { method: 'PATCH', body }),
-  sign: (id, role, signature, name, position, manager_comments) =>
-    apiFetch(`/rie/${id}/sign`, { method: 'POST', body: { role, signature, name, position, manager_comments } }),
+  // body: { role, signature | use_enrolled, password, name, position, manager_comments }
+  sign: (id, body) => apiFetch(`/rie/${id}/sign`, { method: 'POST', body }),
   markFoi: (id) => apiFetch(`/rie/${id}/foi`, { method: 'POST' }),
   close: (id) => apiFetch(`/rie/${id}/close`, { method: 'POST' }),
+}
+
+export const profiles = {
+  get: (id) => apiFetch(`/profiles/${id}`),
+  saveSignature: (signature, password) =>
+    apiFetch('/profiles/me/signature', { method: 'PUT', body: { signature, password } }),
+}
+
+export const admin = {
+  users: () => apiFetch('/admin/users'),
+  setRights: (id, rights) => apiFetch(`/admin/users/${id}`, { method: 'PATCH', body: rights }),
 }
