@@ -280,15 +280,16 @@ function addDays(isoDate, days) {
   return d.toISOString().split('T')[0]
 }
 
-// Continues the legacy Access DB sequence (RIE-001 … RIE-166) with no gaps.
+// Continues the legacy Access DB sequence (…/116, …/166) with no gaps.
 // Only called at manager authorisation, so cancelled drafts never consume a number.
+const REF_PREFIX = 'DHL/AIR/RIE/'
 function nextRefNumber() {
   const row = db.prepare(`
-    SELECT COALESCE(MAX(CAST(SUBSTR(ref_number, 5) AS INTEGER)), 0) + 1 AS next
+    SELECT COALESCE(MAX(CAST(SUBSTR(ref_number, ?) AS INTEGER)), 0) + 1 AS next
     FROM rie_records
-    WHERE ref_number GLOB 'RIE-[0-9]*'
-  `).get()
-  return `RIE-${String(row.next).padStart(3, '0')}`
+    WHERE ref_number GLOB ?
+  `).get(REF_PREFIX.length + 1, REF_PREFIX + '[0-9]*')
+  return `${REF_PREFIX}${row.next}`
 }
 
 app.get('/rie', mustAuth, (_req, res) => {

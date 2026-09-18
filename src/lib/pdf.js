@@ -202,5 +202,6 @@ export async function generateRIEPdf(rec) {
   doc.text(`Generated: ${fmtDt(new Date().toISOString())}`, PW - RM, pageH - 8, { align: 'right' })
   doc.line(LM, pageH - 10, PW - RM, pageH - 10)
 
-  doc.save(`${rec.ref_number}.pdf`)
+  // Slashes are legal in the CAA reference but not in a filename
+  doc.save(`${(rec.ref_number || 'RIE-draft').replace(/\//g, '-')}.pdf`)
 }

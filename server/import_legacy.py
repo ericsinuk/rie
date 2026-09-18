@@ -198,7 +198,7 @@ for row in rows:
         extension_expiry_iso = add_days(mel_interval_expiry_iso, ext_days)
 
     status     = map_status(closed, rpt_gen)
-    ref_number = f'RIE-{int(rie_num):03d}'
+    ref_number = f'DHL/AIR/RIE/{int(rie_num)}'
 
     # Sign timestamps
     sign_date_iso = parse_date(sign_date)

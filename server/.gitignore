@@ -3,3 +3,4 @@ node_modules/
 rie.db
 rie.db-shm
 rie.db-wal
+rie.db.bak-*
