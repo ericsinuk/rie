@@ -34,9 +34,10 @@ function catBadge(cat) {
   return <span className={`badge badge-cat${cat}`}>{cat} · {MEL_DAYS[cat]}d</span>
 }
 
-function ExpiryCell({ date }) {
+function ExpiryCell({ date, closed }) {
   const days = daysUntil(date)
   if (days === null) return <span className="expiry-ok">—</span>
+  if (closed) return <span className="expiry-ok">{fmtDate(date)}</span>
   if (days < 0) return <span className="expiry-over">{fmtDate(date)} ({Math.abs(days)}d overdue)</span>
   if (days <= 3) return <span className="expiry-warn">{fmtDate(date)} ({days}d left)</span>
   return <span className="expiry-ok">{fmtDate(date)}</span>
@@ -77,7 +78,7 @@ export default function Dashboard({ onNew, onOpen }) {
   })
 
   return (
-    <div className="page">
+    <div className="page page-dash">
       <div className="dash-toolbar">
         <h1>RIE Records</h1>
         <button className="btn btn-primary" onClick={onNew}>+ New RIE</button>
@@ -104,6 +105,7 @@ export default function Dashboard({ onNew, onOpen }) {
             <p>{filter === 'All' ? 'No RIE records yet. Click "+ New RIE" to create one.' : `No ${filter} records.`}</p>
           </div>
         ) : (
+          <div className="table-scroll">
           <table className="rie-table">
             <thead>
               <tr>
@@ -126,7 +128,7 @@ export default function Dashboard({ onNew, onOpen }) {
                     className={overdue ? 'row-overdue' : ''}
                     onClick={() => onOpen(r.id)}
                   >
-                    <td className="ref">{r.ref_number}</td>
+                    <td className="ref">{r.ref_number || <span style={{ color: 'var(--text-3)', fontStyle: 'italic', fontSize: 11 }}>Pending</span>}</td>
                     <td className="mono">{r.aircraft_registration}</td>
                     <td style={{ maxWidth: 180 }}>
                       <div className="mono" style={{ fontSize: 12 }}>{r.mel_item_ref}</div>
@@ -134,11 +136,11 @@ export default function Dashboard({ onNew, onOpen }) {
                     </td>
                     <td>{catBadge(r.mel_category)}</td>
                     <td>{statusBadge(r)}</td>
-                    <td><ExpiryCell date={r.mel_interval_expiry} /></td>
-                    <td><ExpiryCell date={r.extension_expiry} /></td>
+                    <td><ExpiryCell date={r.mel_interval_expiry} closed={r.status === 'Closed'} /></td>
+                    <td><ExpiryCell date={r.extension_expiry} closed={r.status === 'Closed'} /></td>
                     <td>
                       {r.foi_due_at
-                        ? <ExpiryCell date={r.foi_due_at} />
+                        ? <ExpiryCell date={r.foi_due_at} closed={r.status !== 'Authorised'} />
                         : <span style={{ color: 'var(--text-3)' }}>—</span>}
                     </td>
                   </tr>
@@ -146,6 +148,7 @@ export default function Dashboard({ onNew, onOpen }) {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

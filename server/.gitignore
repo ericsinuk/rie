@@ -1,4 +1,5 @@
-rie.db
+.env
+node_modules/
 rie.db
 rie.db-shm
 rie.db-wal

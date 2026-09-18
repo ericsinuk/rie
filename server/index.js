@@ -280,14 +280,15 @@ function addDays(isoDate, days) {
   return d.toISOString().split('T')[0]
 }
 
+// Continues the legacy Access DB sequence (RIE-001 … RIE-166) with no gaps.
+// Only called at manager authorisation, so cancelled drafts never consume a number.
 function nextRefNumber() {
-  const year = new Date().getFullYear()
-  const prefix = `RIE-${year}-`
   const row = db.prepare(`
-    SELECT COALESCE(MAX(CAST(SUBSTR(ref_number, LENGTH(?)+1) AS INTEGER)), 0) + 1 AS next
-    FROM rie_records WHERE ref_number LIKE ?
-  `).get(prefix, prefix + '%')
-  return `${prefix}${String(row.next).padStart(3, '0')}`
+    SELECT COALESCE(MAX(CAST(SUBSTR(ref_number, 5) AS INTEGER)), 0) + 1 AS next
+    FROM rie_records
+    WHERE ref_number GLOB 'RIE-[0-9]*'
+  `).get()
+  return `RIE-${String(row.next).padStart(3, '0')}`
 }
 
 app.get('/rie', mustAuth, (_req, res) => {
@@ -304,25 +305,27 @@ app.post('/rie', mustAuth, (req, res) => {
   const {
     aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
     defect_description, mel_category, date_defect_found, date_mel_start,
-    extension_days, extension_reason, additional_limitations, mcc_reference
+    extension_days, extension_reason, additional_limitations, mcc_reference,
+    ref_addp, applicant_position
   } = req.body
   if (!aircraft_registration || !aircraft_type || !mel_item_ref || !defect_description ||
       !mel_category || !date_defect_found || !date_mel_start || !extension_days || !extension_reason)
     return res.status(400).json({ error: 'Missing required fields' })
   const mel_interval_expiry = addDays(date_mel_start, MEL_INTERVALS[mel_category])
   const extension_expiry = addDays(mel_interval_expiry, Number(extension_days))
-  const ref_number = nextRefNumber()
   const row = db.prepare(`
     INSERT INTO rie_records
-      (ref_number, aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
+      (aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
        defect_description, mel_category, date_defect_found, date_mel_start,
        mel_interval_expiry, extension_days, extension_expiry,
-       extension_reason, additional_limitations, mcc_reference, created_by)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *
-  `).get(ref_number, aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title || null,
+       extension_reason, additional_limitations, mcc_reference,
+       ref_addp, applicant_position, created_by)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *
+  `).get(aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title || null,
          defect_description, mel_category, date_defect_found, date_mel_start,
          mel_interval_expiry, Number(extension_days), extension_expiry,
-         extension_reason, additional_limitations || null, mcc_reference || null, req.user.id)
+         extension_reason, additional_limitations || null, mcc_reference || null,
+         ref_addp || null, applicant_position || null, req.user.id)
   broadcast({ event: 'INSERT', table: 'rie_records', new: row })
   res.json(row)
 })
@@ -341,7 +344,8 @@ app.patch('/rie/:id', mustAuth, (req, res) => {
   const {
     aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
     defect_description, mel_category, date_defect_found, date_mel_start,
-    extension_days, extension_reason, additional_limitations, mcc_reference
+    extension_days, extension_reason, additional_limitations, mcc_reference,
+    ref_addp, applicant_position
   } = req.body
 
   const cat = mel_category || existing.mel_category
@@ -362,6 +366,8 @@ app.patch('/rie/:id', mustAuth, (req, res) => {
       extension_reason = COALESCE(?, extension_reason),
       additional_limitations = COALESCE(?, additional_limitations),
       mcc_reference = COALESCE(?, mcc_reference),
+      ref_addp = COALESCE(?, ref_addp),
+      applicant_position = COALESCE(?, applicant_position),
       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
     WHERE id = ? RETURNING *
   `).get(
@@ -370,6 +376,7 @@ app.patch('/rie/:id', mustAuth, (req, res) => {
     cat, date_defect_found || null,
     start, mel_interval_expiry, extDays, extension_expiry,
     extension_reason || null, additional_limitations || null, mcc_reference || null,
+    ref_addp || null, applicant_position || null,
     req.params.id
   )
   broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
@@ -377,7 +384,7 @@ app.patch('/rie/:id', mustAuth, (req, res) => {
 })
 
 app.post('/rie/:id/sign', mustAuth, (req, res) => {
-  const { role, signature, name } = req.body
+  const { role, signature, name, position, manager_comments } = req.body
   if (!['applicant', 'manager'].includes(role)) return res.status(400).json({ error: 'role must be applicant or manager' })
   if (!signature) return res.status(400).json({ error: 'signature required' })
 
@@ -388,11 +395,12 @@ app.post('/rie/:id/sign', mustAuth, (req, res) => {
     if (existing.status !== 'Draft') return res.status(403).json({ error: 'Already signed by applicant' })
     const row = db.prepare(`
       UPDATE rie_records SET
-        applicant_id = ?, applicant_name = ?, applicant_signed_at = ?,
-        applicant_signature = ?, status = 'Pending Manager',
+        applicant_id = ?, applicant_name = ?, applicant_position = ?,
+        applicant_signed_at = ?, applicant_signature = ?,
+        status = 'Pending Manager',
         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
       WHERE id = ? RETURNING *
-    `).get(req.user.id, name || req.user.email, new Date().toISOString(), signature, req.params.id)
+    `).get(req.user.id, name || req.user.email, position || null, new Date().toISOString(), signature, req.params.id)
     broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
     return res.json(row)
   }
@@ -401,14 +409,19 @@ app.post('/rie/:id/sign', mustAuth, (req, res) => {
     if (existing.status !== 'Pending Manager') return res.status(403).json({ error: 'Applicant must sign first' })
     const now = new Date().toISOString()
     const foi_due_at = addDays(now.split('T')[0], 10)
+    // Assign CAA ref number only at authorisation — prevents gaps from cancelled drafts
+    const ref_number = existing.ref_number || nextRefNumber()
     const row = db.prepare(`
       UPDATE rie_records SET
-        manager_id = ?, manager_name = ?, manager_signed_at = ?,
-        manager_signature = ?, status = 'Authorised',
-        foi_due_at = ?,
+        ref_number = ?,
+        manager_id = ?, manager_name = ?, manager_position = ?,
+        manager_signed_at = ?, manager_signature = ?,
+        manager_comments = ?,
+        status = 'Authorised', foi_due_at = ?,
         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
       WHERE id = ? RETURNING *
-    `).get(req.user.id, name || req.user.email, now, signature, foi_due_at, req.params.id)
+    `).get(ref_number, req.user.id, name || req.user.email, position || null,
+           now, signature, manager_comments || null, foi_due_at, req.params.id)
     broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
     return res.json(row)
   }
@@ -505,5 +518,5 @@ wss.on('connection', (ws, req) => {
   })
 })
 
-const PORT = process.env.PORT || 8787
+const PORT = process.env.PORT || 5555
 httpServer.listen(PORT, () => console.log(`RIE server on :${PORT}`))

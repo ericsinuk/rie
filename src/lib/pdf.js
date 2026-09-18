@@ -112,8 +112,8 @@ export function generateRIEPdf(rec) {
     'Extension Requested', `${rec.extension_days} day${rec.extension_days === 1 ? '' : 's'}`,
     'Extension Expiry', fmt(rec.extension_expiry)
   )
-  field('MCC / Technical Reference', rec.mcc_reference || '—')
-  y += 9
+  row2('MCC / Technical Reference', rec.mcc_reference || '—', 'ADD "P" No', rec.ref_addp || '—')
+  y -= 0
 
   rule(); y += 1
 
@@ -146,7 +146,8 @@ export function generateRIEPdf(rec) {
   }
   doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(40)
   doc.text(`Name: ${rec.applicant_name || '—'}`, LM + 2, sigBoxY + 26)
-  doc.text(`Date: ${fmtDt(rec.applicant_signed_at)}`, LM + 2, sigBoxY + 30)
+  if (rec.applicant_position) doc.text(`Position: ${rec.applicant_position}`, LM + 2, sigBoxY + 30)
+  doc.text(`Date: ${fmtDt(rec.applicant_signed_at)}`, LM + 2, sigBoxY + (rec.applicant_position ? 34 : 30))
 
   // Right box (Manager)
   const rX = LM + sigW + 8
@@ -161,9 +162,15 @@ export function generateRIEPdf(rec) {
   }
   doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(40)
   doc.text(`Name: ${rec.manager_name || '—'}`, rX + 2, sigBoxY + 26)
-  doc.text(`Date: ${fmtDt(rec.manager_signed_at)}`, rX + 2, sigBoxY + 30)
+  if (rec.manager_position) doc.text(`Position: ${rec.manager_position}`, rX + 2, sigBoxY + 30)
+  doc.text(`Date: ${fmtDt(rec.manager_signed_at)}`, rX + 2, sigBoxY + (rec.manager_position ? 34 : 30))
 
   y = sigBoxY + sigBoxH + 4
+
+  if (rec.manager_comments) {
+    heading('MANAGER COMMENTS', 8)
+    textBlock('', rec.manager_comments)
+  }
 
   rule(); y += 1
 

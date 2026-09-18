@@ -222,7 +222,7 @@ CREATE TABLE IF NOT EXISTS webrtc_signals (
 
 CREATE TABLE IF NOT EXISTS rie_records (
   id                     TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random())%4+1,1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
-  ref_number             TEXT UNIQUE NOT NULL,
+  ref_number             TEXT UNIQUE,
   aircraft_registration  TEXT NOT NULL,
   aircraft_type          TEXT NOT NULL,
   mel_item_ref           TEXT NOT NULL,
@@ -237,6 +237,10 @@ CREATE TABLE IF NOT EXISTS rie_records (
   extension_reason       TEXT NOT NULL,
   additional_limitations TEXT,
   mcc_reference          TEXT,
+  ref_addp               TEXT,
+  applicant_position     TEXT,
+  manager_position       TEXT,
+  manager_comments       TEXT,
   status                 TEXT NOT NULL DEFAULT 'Draft'
                            CHECK(status IN ('Draft','Pending Manager','Authorised','Submitted to FOI','Closed')),
   applicant_id           TEXT REFERENCES profiles(id),
@@ -254,5 +258,99 @@ CREATE TABLE IF NOT EXISTS rie_records (
   updated_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 `)
+
+// ── Incremental migrations ───────────────────────────────────────────────────
+
+// Add new columns introduced after initial release
+const rieColumns = db.prepare('PRAGMA table_info(rie_records)').all().map(c => c.name)
+for (const [col, def] of [
+  ['ref_addp',           'TEXT'],
+  ['applicant_position', 'TEXT'],
+  ['manager_position',   'TEXT'],
+  ['manager_comments',   'TEXT'],
+]) {
+  if (!rieColumns.includes(col)) {
+    db.prepare(`ALTER TABLE rie_records ADD COLUMN ${col} ${def}`).run()
+    console.log(`Added column rie_records.${col}`)
+  }
+}
+
+// Make ref_number nullable (was NOT NULL in early schema — assign only at authorisation)
+const refCol = db.prepare('PRAGMA table_info(rie_records)').all().find(c => c.name === 'ref_number')
+if (refCol && refCol.notnull === 1) {
+  console.log('Migrating rie_records: making ref_number nullable…')
+  const existingCount = db.prepare('SELECT COUNT(*) AS n FROM rie_records').get().n
+  const recreate = db.transaction(() => {
+    if (existingCount > 0) {
+      db.exec('ALTER TABLE rie_records RENAME TO rie_records_old')
+    } else {
+      db.exec('DROP TABLE rie_records')
+    }
+    db.exec(`
+      CREATE TABLE rie_records (
+        id                     TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random())%4+1,1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
+        ref_number             TEXT UNIQUE,
+        aircraft_registration  TEXT NOT NULL,
+        aircraft_type          TEXT NOT NULL,
+        mel_item_ref           TEXT NOT NULL,
+        mel_chapter_title      TEXT,
+        defect_description     TEXT NOT NULL,
+        mel_category           TEXT NOT NULL CHECK(mel_category IN ('B','C','D')),
+        date_defect_found      TEXT NOT NULL,
+        date_mel_start         TEXT NOT NULL,
+        mel_interval_expiry    TEXT NOT NULL,
+        extension_days         INTEGER NOT NULL DEFAULT 1,
+        extension_expiry       TEXT NOT NULL,
+        extension_reason       TEXT NOT NULL,
+        additional_limitations TEXT,
+        mcc_reference          TEXT,
+        ref_addp               TEXT,
+        applicant_position     TEXT,
+        manager_position       TEXT,
+        manager_comments       TEXT,
+        status                 TEXT NOT NULL DEFAULT 'Draft'
+                                 CHECK(status IN ('Draft','Pending Manager','Authorised','Submitted to FOI','Closed')),
+        applicant_id           TEXT REFERENCES profiles(id),
+        applicant_name         TEXT,
+        applicant_signed_at    TEXT,
+        applicant_signature    TEXT,
+        manager_id             TEXT REFERENCES profiles(id),
+        manager_name           TEXT,
+        manager_signed_at      TEXT,
+        manager_signature      TEXT,
+        foi_due_at             TEXT,
+        foi_submitted_at       TEXT,
+        created_by             TEXT NOT NULL REFERENCES profiles(id),
+        created_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        updated_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      )
+    `)
+    if (existingCount > 0) {
+      db.exec(`
+        INSERT INTO rie_records (
+          id, ref_number, aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
+          defect_description, mel_category, date_defect_found, date_mel_start, mel_interval_expiry,
+          extension_days, extension_expiry, extension_reason, additional_limitations, mcc_reference,
+          ref_addp, applicant_position, manager_position, manager_comments, status,
+          applicant_id, applicant_name, applicant_signed_at, applicant_signature,
+          manager_id, manager_name, manager_signed_at, manager_signature,
+          foi_due_at, foi_submitted_at, created_by, created_at, updated_at
+        )
+        SELECT
+          id, ref_number, aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
+          defect_description, mel_category, date_defect_found, date_mel_start, mel_interval_expiry,
+          extension_days, extension_expiry, extension_reason, additional_limitations, mcc_reference,
+          ref_addp, applicant_position, manager_position, manager_comments, status,
+          applicant_id, applicant_name, applicant_signed_at, applicant_signature,
+          manager_id, manager_name, manager_signed_at, manager_signature,
+          foi_due_at, foi_submitted_at, created_by, created_at, updated_at
+        FROM rie_records_old
+      `)
+      db.exec('DROP TABLE rie_records_old')
+    }
+  })
+  recreate()
+  console.log(`Migration complete: ref_number is now nullable (${existingCount} rows migrated)`)
+}
 
 console.log('Migration complete.')

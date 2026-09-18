@@ -37,6 +37,7 @@ export default function RIEForm({ profile, editId, onBack, onSaved }) {
     extension_reason: '',
     additional_limitations: '',
     mcc_reference: '',
+    ref_addp: '',
   })
 
   useEffect(() => {
@@ -55,6 +56,7 @@ export default function RIEForm({ profile, editId, onBack, onSaved }) {
           extension_reason: data.extension_reason || '',
           additional_limitations: data.additional_limitations || '',
           mcc_reference: data.mcc_reference || '',
+          ref_addp: data.ref_addp || '',
         })
         setLoading(false)
       })
@@ -232,9 +234,15 @@ export default function RIEForm({ profile, editId, onBack, onSaved }) {
             />
           </div>
 
-          <div className="field">
-            <label>MCC / Technical Reference</label>
-            <input value={form.mcc_reference} onChange={e => set('mcc_reference', e.target.value)} placeholder="MCC-2026-xxxx" />
+          <div className="field-row">
+            <div className="field">
+              <label>MCC / Technical Reference</label>
+              <input value={form.mcc_reference} onChange={e => set('mcc_reference', e.target.value)} placeholder="MCC-2026-xxxx" />
+            </div>
+            <div className="field">
+              <label>ADD "P" No</label>
+              <input value={form.ref_addp} onChange={e => set('ref_addp', e.target.value)} placeholder="PADD reference" />
+            </div>
           </div>
         </div>
 

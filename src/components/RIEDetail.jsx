@@ -49,9 +49,9 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
     setLoading(false)
   }
 
-  async function handleSign(dataUrl, name) {
+  async function handleSign(dataUrl, name, position, managerComments) {
     setError('')
-    const { data, error: err } = await rie.sign(id, signing, dataUrl, name)
+    const { data, error: err } = await rie.sign(id, signing, dataUrl, name, position, managerComments)
     if (err) { setError(err.error || err.message || 'Sign failed'); return }
     setRec(data)
     setSigning(null)
@@ -71,9 +71,10 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
 
   if (loading || !rec) return <div className="loading">Loading…</div>
 
-  const extDays = daysUntil(rec.extension_expiry)
+  const isClosed = rec.status === 'Closed'
+  const extDays = isClosed ? null : daysUntil(rec.extension_expiry)
   const foiDays = daysUntil(rec.foi_due_at)
-  const isOverdue = extDays !== null && extDays < 0 && rec.status !== 'Closed'
+  const isOverdue = extDays !== null && extDays < 0
   const foiOverdue = rec.foi_due_at && foiDays !== null && foiDays < 0 && rec.status === 'Authorised'
 
   return (
@@ -81,7 +82,7 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
       {/* Header */}
       <div className="detail-header">
         <div className="meta">
-          <div className="ref">{rec.ref_number}</div>
+          <div className="ref">{rec.ref_number || <span style={{ color: 'var(--text-3)', fontStyle: 'italic' }}>Ref assigned at authorisation</span>}</div>
           <div className="ac">{rec.aircraft_registration} · {rec.aircraft_type}</div>
           <div className="mel">{rec.mel_item_ref}{rec.mel_chapter_title ? ` — ${rec.mel_chapter_title}` : ''}</div>
         </div>
@@ -186,12 +187,20 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
             <div className="val" style={{ whiteSpace: 'pre-wrap' }}>{rec.additional_limitations}</div>
           </div>
         )}
-        {rec.mcc_reference && (
-          <div className="detail-field">
-            <div className="lbl">MCC Reference</div>
-            <div className="val mono">{rec.mcc_reference}</div>
-          </div>
-        )}
+        <div className="detail-field-row">
+          {rec.mcc_reference && (
+            <div className="detail-field">
+              <div className="lbl">MCC Reference</div>
+              <div className="val mono">{rec.mcc_reference}</div>
+            </div>
+          )}
+          {rec.ref_addp && (
+            <div className="detail-field">
+              <div className="lbl">ADD "P" No</div>
+              <div className="val mono">{rec.ref_addp}</div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Section 3: Signatures */}
@@ -201,12 +210,15 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
           {/* Applicant */}
           <div className="sig-block">
             <div className="sig-title">Applicant</div>
-            {rec.applicant_signature ? (
+            {rec.applicant_signed_at ? (
               <>
-                <div className="sig-img">
-                  <img src={rec.applicant_signature} alt="Applicant signature" />
-                </div>
+                {rec.applicant_signature && (
+                  <div className="sig-img">
+                    <img src={rec.applicant_signature} alt="Applicant signature" />
+                  </div>
+                )}
                 <div className="sig-name">{rec.applicant_name}</div>
+                {rec.applicant_position && <div className="sig-date">{rec.applicant_position}</div>}
                 <div className="sig-date">{fmtDt(rec.applicant_signed_at)}</div>
               </>
             ) : (
@@ -224,12 +236,15 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
           {/* Manager */}
           <div className="sig-block">
             <div className="sig-title">Authorising Manager</div>
-            {rec.manager_signature ? (
+            {rec.manager_signed_at ? (
               <>
-                <div className="sig-img">
-                  <img src={rec.manager_signature} alt="Manager signature" />
-                </div>
+                {rec.manager_signature && (
+                  <div className="sig-img">
+                    <img src={rec.manager_signature} alt="Manager signature" />
+                  </div>
+                )}
                 <div className="sig-name">{rec.manager_name}</div>
+                {rec.manager_position && <div className="sig-date">{rec.manager_position}</div>}
                 <div className="sig-date">{fmtDt(rec.manager_signed_at)}</div>
               </>
             ) : (
@@ -244,6 +259,12 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
                 ) : (
                   <div>Awaiting applicant signature first</div>
                 )}
+              </div>
+            )}
+            {rec.manager_comments && (
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-2)', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.3px', marginBottom: 3 }}>Manager Comments</div>
+                {rec.manager_comments}
               </div>
             )}
           </div>
@@ -307,6 +328,7 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
         <SignaturePad
           role={signing}
           signerName={profile?.full_name || ''}
+          signerPosition={profile?.department || ''}
           onSign={handleSign}
           onCancel={() => setSigning(null)}
         />

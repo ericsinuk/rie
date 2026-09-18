@@ -354,8 +354,8 @@ export const rie = {
   get: (id) => apiFetch(`/rie/${id}`),
   create: (body) => apiFetch('/rie', { method: 'POST', body }),
   update: (id, body) => apiFetch(`/rie/${id}`, { method: 'PATCH', body }),
-  sign: (id, role, signature, name) =>
-    apiFetch(`/rie/${id}/sign`, { method: 'POST', body: { role, signature, name } }),
+  sign: (id, role, signature, name, position, manager_comments) =>
+    apiFetch(`/rie/${id}/sign`, { method: 'POST', body: { role, signature, name, position, manager_comments } }),
   markFoi: (id) => apiFetch(`/rie/${id}/foi`, { method: 'POST' }),
   close: (id) => apiFetch(`/rie/${id}/close`, { method: 'POST' }),
 }
