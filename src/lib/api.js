@@ -24,6 +24,12 @@ async function apiFetch(path, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   })
   const data = await res.json().catch(() => ({}))
+  // A token whose signature no longer verifies still parses and looks unexpired
+  // client-side, so without this the app renders a signed-in shell over empty data.
+  if (res.status === 401 && token && !path.startsWith('/auth/')) {
+    setToken(null)
+    notifyAuthChange('SIGNED_OUT', null)
+  }
   if (!res.ok) return { data: null, error: data }
   return { data, error: null }
 }
