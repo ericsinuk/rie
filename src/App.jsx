@@ -4,6 +4,7 @@ import AuthPage from './components/AuthPage.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import RIEForm from './components/RIEForm.jsx'
 import RIEDetail from './components/RIEDetail.jsx'
+import dhlLogo from './assets/dhl-logo.svg'
 import './styles/index.css'
 
 export default function App() {
@@ -42,7 +43,7 @@ export default function App() {
   return (
     <>
       <header className="app-header">
-        <span className="logo">DHL</span>
+        <span className="logo"><img src={dhlLogo} alt="DHL" /></span>
         <div>
           <div className="title">Rectification Interval Extension</div>
           <div className="subtitle">MEL Management System</div>

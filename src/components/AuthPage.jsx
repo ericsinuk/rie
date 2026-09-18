@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { auth } from '../lib/api.js'
+import dhlLogo from '../assets/dhl-logo.svg'
 
 const ROLES = ['Engineer', 'Maintenance Manager', 'Flight Operations', 'Quality', 'Admin']
 
@@ -33,7 +34,7 @@ export default function AuthPage() {
     <div className="auth-wrap">
       <div className="auth-card">
         <div className="auth-logo">
-          <div className="dhl">DHL</div>
+          <div className="dhl"><img src={dhlLogo} alt="DHL" /></div>
           <div className="app">Rectification Interval Extension</div>
         </div>
 

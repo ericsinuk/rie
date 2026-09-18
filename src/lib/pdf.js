@@ -1,4 +1,20 @@
 import jsPDF from 'jspdf'
+import dhlLogo from '../assets/dhl-logo-pdf.png'
+
+// The build inlines the logo as a base64 data URL, but the dev server serves it as a
+// plain URL — and jsPDF needs image data, not a URL. Normalise so both behave alike.
+let _logoData = null
+async function logoDataUrl() {
+  if (_logoData) return _logoData
+  if (dhlLogo.startsWith('data:')) return (_logoData = dhlLogo)
+  const blob = await fetch(dhlLogo).then(r => r.blob())
+  _logoData = await new Promise(resolve => {
+    const fr = new FileReader()
+    fr.onload = () => resolve(fr.result)
+    fr.readAsDataURL(blob)
+  })
+  return _logoData
+}
 
 const MEL_DAYS = { B: 3, C: 10, D: 120 }
 
@@ -14,7 +30,8 @@ function fmtDt(iso) {
   })
 }
 
-export function generateRIEPdf(rec) {
+export async function generateRIEPdf(rec) {
+  const logo = await logoDataUrl()
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const PW = 210; const LM = 15; const RM = 15; const CW = PW - LM - RM
   let y = 18
@@ -69,11 +86,7 @@ export function generateRIEPdf(rec) {
   }
 
   // ── Header ──────────────────────────────────────────────────────────────
-  doc.setFillColor(255, 204, 0)
-  doc.rect(LM, y - 6, 28, 10, 'F')
-  doc.setFontSize(14); doc.setFont('helvetica', 'black')
-  doc.setTextColor(0)
-  doc.text('DHL', LM + 3, y)
+  doc.addImage(logo, 'PNG', LM, y - 6, 28, 6.17)
 
   doc.setFontSize(10); doc.setFont('helvetica', 'bold')
   doc.setTextColor(40)

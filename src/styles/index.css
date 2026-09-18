@@ -101,9 +101,10 @@ select { appearance: none; }
   gap: 12px; position: sticky; top: 0; z-index: 100;
 }
 .app-header .logo {
-  background: var(--primary); color: #000; font-weight: 900;
-  font-size: 13px; padding: 4px 8px; border-radius: 3px; letter-spacing: 1px;
+  background: var(--primary); border-radius: 3px;
+  padding: 6px 8px; display: flex; align-items: center; flex-shrink: 0;
 }
+.app-header .logo img { display: block; height: 13px; width: auto; }
 .app-header .title { font-weight: 700; font-size: 15px; flex: 1; }
 .app-header .subtitle { font-size: 11px; color: var(--text-3); }
 
@@ -133,7 +134,11 @@ select { appearance: none; }
 .auth-logo {
   text-align: center; margin-bottom: 28px;
 }
-.auth-logo .dhl { font-size: 28px; font-weight: 900; color: var(--primary); letter-spacing: 2px; }
+.auth-logo .dhl {
+  background: var(--primary); border-radius: 4px;
+  padding: 12px 16px; display: inline-flex; align-items: center;
+}
+.auth-logo .dhl img { display: block; height: 26px; width: auto; }
 .auth-logo .app { font-size: 13px; color: var(--text-2); margin-top: 2px; }
 .auth-error { background: #450a0a; color: var(--danger); padding: 8px 12px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 12px; }
 .auth-toggle { text-align: center; margin-top: 16px; font-size: 13px; color: var(--text-2); }

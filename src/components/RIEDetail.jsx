@@ -307,7 +307,7 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
           <button className="btn btn-ghost" onClick={() => onEdit(id)}>Edit</button>
         )}
         {(rec.status === 'Authorised' || rec.status === 'Submitted to FOI' || rec.status === 'Closed') && (
-          <button className="btn btn-primary btn-lg" onClick={() => generateRIEPdf(rec)}>
+          <button className="btn btn-primary btn-lg" onClick={() => generateRIEPdf(rec).catch(e => setError(e.message || 'PDF generation failed'))}>
             ⬇ Download PDF
           </button>
         )}
