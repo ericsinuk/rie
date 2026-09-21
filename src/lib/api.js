@@ -363,13 +363,20 @@ export const rie = {
   // body: { role, signature | use_enrolled, password, name, position, manager_comments }
   sign: (id, body) => apiFetch(`/rie/${id}/sign`, { method: 'POST', body }),
   markFoi: (id) => apiFetch(`/rie/${id}/foi`, { method: 'POST' }),
-  close: (id) => apiFetch(`/rie/${id}/close`, { method: 'POST' }),
+  close: (id, body = {}) => apiFetch(`/rie/${id}/close`, { method: 'POST', body }),
 }
 
 export const profiles = {
   get: (id) => apiFetch(`/profiles/${id}`),
   saveSignature: (signature, password) =>
     apiFetch('/profiles/me/signature', { method: 'PUT', body: { signature, password } }),
+}
+
+export const fleet = {
+  list: () => apiFetch('/fleet'),
+  add: (body) => apiFetch('/fleet', { method: 'POST', body }),
+  update: (id, body) => apiFetch(`/fleet/${id}`, { method: 'PATCH', body }),
+  remove: (id) => apiFetch(`/fleet/${id}`, { method: 'DELETE' }),
 }
 
 export const admin = {

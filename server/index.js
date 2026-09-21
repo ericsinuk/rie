@@ -121,6 +121,41 @@ app.patch('/admin/users/:id', mustAdmin, (req, res) => {
   res.json(publicProfile(row, req.user.id))
 })
 
+// ── Fleet ────────────────────────────────────────────────────────────────────
+app.get('/fleet', mustAuth, (_req, res) => {
+  res.json(db.prepare('SELECT * FROM fleet ORDER BY registration').all())
+})
+
+app.post('/fleet', mustAdmin, (req, res) => {
+  const { registration, aircraft_type } = req.body
+  if (!registration?.trim() || !aircraft_type?.trim())
+    return res.status(400).json({ error: 'Registration and type are required' })
+  const row = db.prepare(
+    'INSERT INTO fleet (registration, aircraft_type) VALUES (?, ?) RETURNING *'
+  ).get(registration.trim().toUpperCase(), aircraft_type.trim())
+  res.json(row)
+})
+
+app.patch('/fleet/:id', mustAdmin, (req, res) => {
+  const { registration, aircraft_type, active } = req.body
+  const row = db.prepare(`
+    UPDATE fleet SET
+      registration  = COALESCE(?, registration),
+      aircraft_type = COALESCE(?, aircraft_type),
+      active        = COALESCE(?, active)
+    WHERE id = ? RETURNING *
+  `).get(registration?.trim().toUpperCase() ?? null, aircraft_type?.trim() ?? null,
+         active != null ? (active ? 1 : 0) : null, req.params.id)
+  if (!row) return res.status(404).json({ error: 'Not found' })
+  res.json(row)
+})
+
+app.delete('/fleet/:id', mustAdmin, (req, res) => {
+  const info = db.prepare('DELETE FROM fleet WHERE id = ?').run(req.params.id)
+  if (!info.changes) return res.status(404).json({ error: 'Not found' })
+  res.json({ ok: true })
+})
+
 app.patch('/profiles/:id', mustAuth, (req, res) => {
   if (req.user.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' })
   const { full_name, department } = req.body
@@ -367,28 +402,31 @@ app.get('/rie', mustAuth, (_req, res) => {
 app.post('/rie', mustAuth, (req, res) => {
   const {
     aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
-    defect_description, mel_category, date_defect_found, date_mel_start,
+    defect_description, reason_not_rectifying, mel_category, date_defect_found, date_mel_start,
     extension_days, extension_reason, additional_limitations, mcc_reference,
-    ref_addp, applicant_position
+    ref_addp, applicant_position, operational_restriction, srp_raised
   } = req.body
   if (!aircraft_registration || !aircraft_type || !mel_item_ref || !defect_description ||
-      !mel_category || !date_defect_found || !date_mel_start || !extension_days || !extension_reason)
+      !mel_category || !date_defect_found || !extension_days || !extension_reason)
     return res.status(400).json({ error: 'Missing required fields' })
-  const mel_interval_expiry = addDays(date_mel_start, MEL_INTERVALS[mel_category])
+  const mel_start = date_mel_start || date_defect_found
+  const mel_interval_expiry = addDays(mel_start, MEL_INTERVALS[mel_category])
   const extension_expiry = addDays(mel_interval_expiry, Number(extension_days))
   const row = db.prepare(`
     INSERT INTO rie_records
       (aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
-       defect_description, mel_category, date_defect_found, date_mel_start,
+       defect_description, reason_not_rectifying, mel_category, date_defect_found, date_mel_start,
        mel_interval_expiry, extension_days, extension_expiry,
        extension_reason, additional_limitations, mcc_reference,
-       ref_addp, applicant_position, created_by)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *
+       ref_addp, applicant_position, operational_restriction, srp_raised, created_by)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *
   `).get(aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title || null,
-         defect_description, mel_category, date_defect_found, date_mel_start,
+         defect_description, reason_not_rectifying || null, mel_category,
+         date_defect_found, date_mel_start,
          mel_interval_expiry, Number(extension_days), extension_expiry,
          extension_reason, additional_limitations || null, mcc_reference || null,
-         ref_addp || null, applicant_position || null, req.user.id)
+         ref_addp || null, applicant_position || null,
+         operational_restriction ? 1 : 0, srp_raised || null, req.user.id)
   broadcast({ event: 'INSERT', table: 'rie_records', new: row })
   res.json(row)
 })
@@ -406,13 +444,13 @@ app.patch('/rie/:id', mustAuth, (req, res) => {
 
   const {
     aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
-    defect_description, mel_category, date_defect_found, date_mel_start,
+    defect_description, reason_not_rectifying, mel_category, date_defect_found, date_mel_start,
     extension_days, extension_reason, additional_limitations, mcc_reference,
-    ref_addp, applicant_position
+    ref_addp, applicant_position, operational_restriction, srp_raised
   } = req.body
 
   const cat = mel_category || existing.mel_category
-  const start = date_mel_start || existing.date_mel_start
+  const start = date_mel_start || date_defect_found || existing.date_mel_start
   const extDays = extension_days != null ? Number(extension_days) : existing.extension_days
   const mel_interval_expiry = addDays(start, MEL_INTERVALS[cat])
   const extension_expiry = addDays(mel_interval_expiry, extDays)
@@ -424,6 +462,7 @@ app.patch('/rie/:id', mustAuth, (req, res) => {
       mel_item_ref = COALESCE(?, mel_item_ref),
       mel_chapter_title = COALESCE(?, mel_chapter_title),
       defect_description = COALESCE(?, defect_description),
+      reason_not_rectifying = COALESCE(?, reason_not_rectifying),
       mel_category = ?, date_defect_found = COALESCE(?, date_defect_found),
       date_mel_start = ?, mel_interval_expiry = ?, extension_days = ?, extension_expiry = ?,
       extension_reason = COALESCE(?, extension_reason),
@@ -431,15 +470,19 @@ app.patch('/rie/:id', mustAuth, (req, res) => {
       mcc_reference = COALESCE(?, mcc_reference),
       ref_addp = COALESCE(?, ref_addp),
       applicant_position = COALESCE(?, applicant_position),
+      operational_restriction = COALESCE(?, operational_restriction),
+      srp_raised = COALESCE(?, srp_raised),
       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
     WHERE id = ? RETURNING *
   `).get(
     aircraft_registration || null, aircraft_type || null, mel_item_ref || null,
-    mel_chapter_title || null, defect_description || null,
+    mel_chapter_title || null, defect_description || null, reason_not_rectifying || null,
     cat, date_defect_found || null,
     start, mel_interval_expiry, extDays, extension_expiry,
     extension_reason || null, additional_limitations || null, mcc_reference || null,
     ref_addp || null, applicant_position || null,
+    operational_restriction != null ? (operational_restriction ? 1 : 0) : null,
+    srp_raised || null,
     req.params.id
   )
   broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
@@ -527,10 +570,15 @@ app.post('/rie/:id/foi', mustAuth, (req, res) => {
 })
 
 app.post('/rie/:id/close', mustAuth, (req, res) => {
+  const { closure_date, srp_clearance } = req.body
   const row = db.prepare(`
-    UPDATE rie_records SET status = 'Closed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+    UPDATE rie_records SET
+      status = 'Closed',
+      closure_date = COALESCE(?, closure_date),
+      srp_clearance = COALESCE(?, srp_clearance),
+      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
     WHERE id = ? RETURNING *
-  `).get(req.params.id)
+  `).get(closure_date || null, srp_clearance || null, req.params.id)
   if (!row) return res.status(404).json({ error: 'Not found' })
   broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
   res.json(row)

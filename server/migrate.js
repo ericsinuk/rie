@@ -259,6 +259,32 @@ CREATE TABLE IF NOT EXISTS rie_records (
 );
 `)
 
+db.exec(`
+CREATE TABLE IF NOT EXISTS fleet (
+  id               TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random())%4+1,1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
+  registration     TEXT UNIQUE NOT NULL,
+  aircraft_type    TEXT NOT NULL,
+  active           INTEGER NOT NULL DEFAULT 1,
+  created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+`)
+
+// Seed fleet if empty
+const fleetCount = db.prepare('SELECT COUNT(*) AS n FROM fleet').get().n
+if (fleetCount === 0) {
+  const seedFleet = [
+    ['G-BMRA','B757'],['G-BMRB','B757'],['G-BMRD','B757'],['G-BMRI','B757'],['G-BMRJ','B757'],
+    ['G-DHLE','B767'],['G-DHLJ','B767'],['G-DHLK','B767'],['G-DHLM','B767'],['G-DHLO','B767'],
+    ['G-DHLP','B767'],['G-DHLR','B767'],['G-DHLS','B767'],
+    ['G-DHLU','B777'],['G-DHLV','B777'],['G-DHLW','B777'],['G-DHLX','B777'],['G-DHLY','B777'],
+    ['G-DHMC','B777'],['G-DHMD','B777'],
+  ]
+  const ins = db.prepare('INSERT INTO fleet (registration, aircraft_type) VALUES (?, ?)')
+  const insertAll = db.transaction(rows => { for (const r of rows) ins.run(...r) })
+  insertAll(seedFleet)
+  console.log(`Seeded ${seedFleet.length} fleet aircraft.`)
+}
+
 // ── Incremental migrations ───────────────────────────────────────────────────
 
 // Add new columns introduced after initial release
@@ -371,9 +397,18 @@ if (refCol && refCol.notnull === 1) {
 // Runs after the table recreation above so these columns aren't dropped by it
 // Records whether each signature was drawn at signing time or applied from the enrolled one
 const rieColumns2 = db.prepare('PRAGMA table_info(rie_records)').all().map(c => c.name)
-for (const col of ['applicant_sig_source', 'manager_sig_source']) {
+for (const [col, def] of [
+  ['applicant_sig_source', 'TEXT'],
+  ['manager_sig_source',   'TEXT'],
+  // 3-part form fields (added 2026-09-21)
+  ['reason_not_rectifying',  'TEXT'],
+  ['operational_restriction','INTEGER DEFAULT 0'],
+  ['srp_raised',             'TEXT'],
+  ['srp_clearance',          'TEXT'],
+  ['closure_date',           'TEXT'],
+]) {
   if (!rieColumns2.includes(col)) {
-    db.prepare(`ALTER TABLE rie_records ADD COLUMN ${col} TEXT`).run()
+    db.prepare(`ALTER TABLE rie_records ADD COLUMN ${col} ${def}`).run()
     console.log(`Added column rie_records.${col}`)
   }
 }

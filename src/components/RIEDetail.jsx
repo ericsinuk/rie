@@ -19,25 +19,26 @@ function daysUntil(iso) {
   return Math.ceil((new Date(iso) - new Date()) / 86400000)
 }
 
-// Legacy paper records have no source; only new e-signatures are labelled
 function SigSource({ source }) {
   if (!source) return null
   return <div className="sig-source">{source === 'enrolled' ? 'Saved signature applied · password confirmed' : 'Drawn at signing · password confirmed'}</div>
 }
 
 const TIMELINE_STEPS = [
-  { key: 'draft',   label: 'Created',          statusMatch: () => true },
-  { key: 'app',     label: 'Applicant Signed',  statusMatch: s => ['Pending Manager','Authorised','Submitted to FOI','Closed'].includes(s) },
-  { key: 'mgr',     label: 'Manager Authorised',statusMatch: s => ['Authorised','Submitted to FOI','Closed'].includes(s) },
-  { key: 'foi',     label: 'Submitted to FOI',  statusMatch: s => ['Submitted to FOI','Closed'].includes(s) },
-  { key: 'closed',  label: 'Closed',            statusMatch: s => s === 'Closed' },
+  { key: 'draft',   label: 'Created',           statusMatch: () => true },
+  { key: 'app',     label: 'Applicant Signed',   statusMatch: s => ['Pending Manager','Authorised','Submitted to FOI','Closed'].includes(s) },
+  { key: 'mgr',     label: 'Manager Authorised', statusMatch: s => ['Authorised','Submitted to FOI','Closed'].includes(s) },
+  { key: 'foi',     label: 'Submitted to FOI',   statusMatch: s => ['Submitted to FOI','Closed'].includes(s) },
+  { key: 'closed',  label: 'Closed',             statusMatch: s => s === 'Closed' },
 ]
 
 export default function RIEDetail({ id, profile, onBack, onEdit }) {
   const [rec, setRec] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [signing, setSigning] = useState(null) // 'applicant' | 'manager' | null
+  const [signing, setSigning] = useState(null)
   const [error, setError] = useState('')
+  const [closeForm, setCloseForm] = useState({ closure_date: '', srp_clearance: '' })
+  const [showCloseForm, setShowCloseForm] = useState(false)
 
   useEffect(() => {
     loadRec()
@@ -70,9 +71,10 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
   }
 
   async function handleClose() {
-    const { data, error: err } = await rie.close(id)
+    const { data, error: err } = await rie.close(id, closeForm)
     if (err) { setError(err.error || err.message || 'Failed'); return }
     setRec(data)
+    setShowCloseForm(false)
   }
 
   if (loading || !rec) return <div className="loading">Loading…</div>
@@ -84,7 +86,7 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
   const foiOverdue = rec.foi_due_at && foiDays !== null && foiDays < 0 && rec.status === 'Authorised'
 
   return (
-    <div className="page-sm">
+    <div className="page-wide">
       {/* Header */}
       <div className="detail-header">
         <div className="meta">
@@ -114,9 +116,7 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
                             step.key === TIMELINE_STEPS[TIMELINE_STEPS.findLastIndex(s => s.statusMatch(rec.status))]?.key
           return (
             <div key={step.key} className="timeline-step">
-              <div className={`ts-dot ${done ? (isCurrent ? 'current' : 'done') : ''}`}>
-                {done ? '✓' : ''}
-              </div>
+              <div className={`ts-dot ${done ? (isCurrent ? 'current' : 'done') : ''}`}>{done ? '✓' : ''}</div>
               <div className="ts-label">{step.label}</div>
             </div>
           )
@@ -144,177 +144,227 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
 
       {error && <div className="auth-error" style={{ marginBottom: 12 }}>{error}</div>}
 
-      {/* Section 1: Aircraft & Defect */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="section-title">Aircraft &amp; Defect Details</div>
+      <div className="rie-parts-row">
+      {/* PART 1 — MEL DEFECT */}
+      <div className="rie-part-card">
+        <div className="rie-part-header">Part 1 — MEL Defect</div>
+
         <div className="detail-grid">
+          <div className="detail-field"><div className="lbl">Date of Defect</div><div className="val">{fmtDate(rec.date_defect_found)}</div></div>
+          <div className="detail-field"><div className="lbl">Aircraft Registration</div><div className="val mono">{rec.aircraft_registration}</div></div>
+          <div className="detail-field"><div className="lbl">Aircraft Type</div><div className="val">{rec.aircraft_type}</div></div>
+          <div className="detail-field"><div className="lbl">MEL Reference No</div><div className="val mono">{rec.mel_item_ref}</div></div>
           <div>
-            <div className="detail-field"><div className="lbl">Aircraft Registration</div><div className="val mono">{rec.aircraft_registration}</div></div>
-            <div className="detail-field"><div className="lbl">Aircraft Type</div><div className="val">{rec.aircraft_type}</div></div>
-            <div className="detail-field"><div className="lbl">MEL Item Reference</div><div className="val mono">{rec.mel_item_ref}</div></div>
-            {rec.mel_chapter_title && <div className="detail-field"><div className="lbl">MEL Chapter</div><div className="val">{rec.mel_chapter_title}</div></div>}
-          </div>
-          <div>
-            <div className="detail-field"><div className="lbl">Date Defect Found</div><div className="val">{fmtDate(rec.date_defect_found)}</div></div>
-            <div className="detail-field"><div className="lbl">MEL Interval Start</div><div className="val">{fmtDate(rec.date_mel_start)}</div></div>
+            {rec.mel_chapter_title && <div className="detail-field"><div className="lbl">MEL System Title</div><div className="val">{rec.mel_chapter_title}</div></div>}
             <div className="detail-field">
-              <div className="lbl">MEL Interval Expiry</div>
-              <div className={`val ${extDays !== null && extDays < 0 ? 'over' : extDays !== null && extDays <= 3 ? 'warn' : ''}`}>
-                {fmtDate(rec.mel_interval_expiry)}
-              </div>
+              <div className="lbl">MEL Interval</div>
+              <div className="val">Category {rec.mel_category} ({MEL_DAYS[rec.mel_category]} days)</div>
             </div>
             <div className="detail-field">
-              <div className="lbl">Extension ({rec.extension_days} days) Expiry</div>
-              <div className={`val ${extDays !== null && extDays < 0 ? 'over' : extDays !== null && extDays <= 3 ? 'warn' : ''}`}>
-                {fmtDate(rec.extension_expiry)}
-                {extDays !== null && <span style={{ marginLeft: 6, fontSize: 11, color: 'inherit' }}>
-                  ({extDays < 0 ? `${Math.abs(extDays)}d overdue` : `${extDays}d`})
-                </span>}
-              </div>
+              <div className="lbl">MEL Expiry</div>
+              <div className="val">{fmtDate(rec.mel_interval_expiry)}</div>
             </div>
           </div>
         </div>
+
         <div className="detail-field">
-          <div className="lbl">Defect Description</div>
+          <div className="lbl">Detail of Defect</div>
           <div className="val" style={{ whiteSpace: 'pre-wrap' }}>{rec.defect_description}</div>
         </div>
-      </div>
 
-      {/* Section 2: Justification */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="section-title">Justification</div>
-        <div className="detail-field">
-          <div className="lbl">Reason for Extension</div>
-          <div className="val" style={{ whiteSpace: 'pre-wrap' }}>{rec.extension_reason}</div>
-        </div>
-        {rec.additional_limitations && (
+        {rec.reason_not_rectifying && (
           <div className="detail-field">
-            <div className="lbl">Additional Limitations / Conditions</div>
-            <div className="val" style={{ whiteSpace: 'pre-wrap' }}>{rec.additional_limitations}</div>
+            <div className="lbl">Reason for not rectifying</div>
+            <div className="val" style={{ whiteSpace: 'pre-wrap' }}>{rec.reason_not_rectifying}</div>
           </div>
         )}
+
         <div className="detail-field-row">
-          {rec.mcc_reference && (
+          {rec.srp_raised && (
             <div className="detail-field">
-              <div className="lbl">MCC Reference</div>
-              <div className="val mono">{rec.mcc_reference}</div>
+              <div className="lbl">SRP No</div>
+              <div className="val mono">{rec.srp_raised}</div>
             </div>
           )}
           {rec.ref_addp && (
             <div className="detail-field">
-              <div className="lbl">ADD "P" No</div>
+              <div className="lbl">MDDR / "P" No</div>
               <div className="val mono">{rec.ref_addp}</div>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Section 3: Signatures */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="section-title">Signatures</div>
-        <div className="sig-grid">
-          {/* Applicant */}
-          <div className="sig-block">
-            <div className="sig-title">Applicant</div>
-            {rec.applicant_signed_at ? (
-              <>
-                {rec.applicant_signature && (
-                  <div className="sig-img">
-                    <img src={rec.applicant_signature} alt="Applicant signature" />
-                  </div>
-                )}
-                <div className="sig-name">{rec.applicant_name}</div>
-                {rec.applicant_position && <div className="sig-date">{rec.applicant_position}</div>}
-                <div className="sig-date">{fmtDt(rec.applicant_signed_at)}</div>
-                <SigSource source={rec.applicant_sig_source} />
-              </>
-            ) : (
-              <div className="sig-pending">
-                <div style={{ marginBottom: 8 }}>Not yet signed</div>
-                {rec.status === 'Draft' && (profile?.can_sign_applicant ? (
-                  <button className="btn btn-primary btn-sm" onClick={() => setSigning('applicant')}>
-                    Sign as Applicant
-                  </button>
-                ) : (
-                  <div className="sig-note">You are not authorised to sign as applicant</div>
-                ))}
-              </div>
-            )}
+        {rec.operational_restriction ? (
+          <div className="detail-field">
+            <div className="lbl">Operational Restriction</div>
+            <div className="val">
+              <span className="badge badge-overdue" style={{ fontSize: 11 }}>YES</span>
+              {rec.additional_limitations && <span style={{ marginLeft: 8 }}>{rec.additional_limitations}</span>}
+            </div>
           </div>
+        ) : null}
+      </div>{/* end Part 1 */}
 
-          {/* Manager */}
-          <div className="sig-block">
-            <div className="sig-title">Authorising Manager</div>
-            {rec.manager_signed_at ? (
-              <>
-                {rec.manager_signature && (
-                  <div className="sig-img">
-                    <img src={rec.manager_signature} alt="Manager signature" />
-                  </div>
-                )}
-                <div className="sig-name">{rec.manager_name}</div>
-                {rec.manager_position && <div className="sig-date">{rec.manager_position}</div>}
-                <div className="sig-date">{fmtDt(rec.manager_signed_at)}</div>
-                <SigSource source={rec.manager_sig_source} />
-              </>
-            ) : (
-              <div className="sig-pending">
-                {rec.status === 'Pending Manager' ? (
-                  <>
-                    <div style={{ marginBottom: 8 }}>Awaiting manager authorisation</div>
-                    {rec.applicant_id === profile?.id ? (
-                      <div className="sig-note">You signed as applicant — a different manager must authorise</div>
-                    ) : profile?.can_sign_manager ? (
-                      <button className="btn btn-primary btn-sm" onClick={() => setSigning('manager')}>
-                        Authorise as Manager
-                      </button>
-                    ) : (
-                      <div className="sig-note">You are not authorised to sign as manager</div>
-                    )}
-                  </>
-                ) : (
-                  <div>Awaiting applicant signature first</div>
-                )}
-              </div>
-            )}
-            {rec.manager_comments && (
-              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-2)', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-                <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.3px', marginBottom: 3 }}>Manager Comments</div>
-                {rec.manager_comments}
-              </div>
-            )}
+      {/* PART 2 — RIE APPLICATION */}
+      <div className="rie-part-card">
+        <div className="rie-part-header">Part 2 — RIE Application</div>
+
+        <div className="detail-grid">
+          <div className="detail-field"><div className="lbl">Name of Applicant</div><div className="val">{rec.applicant_name || '—'}</div></div>
+          <div className="detail-field"><div className="lbl">Position</div><div className="val">{rec.applicant_position || '—'}</div></div>
+          <div className="detail-field">
+            <div className="lbl">Requested Duration</div>
+            <div className="val">{rec.extension_days} day{rec.extension_days !== 1 ? 's' : ''}</div>
           </div>
+          <div className="detail-field">
+            <div className="lbl">Extension Expiry</div>
+            <div className={`val ${extDays !== null && extDays < 0 ? 'over' : extDays !== null && extDays <= 3 ? 'warn' : ''}`}>
+              {fmtDate(rec.extension_expiry)}
+              {extDays !== null && <span style={{ marginLeft: 6, fontSize: 11, color: 'inherit' }}>
+                ({extDays < 0 ? `${Math.abs(extDays)}d overdue` : `${extDays}d remaining`})
+              </span>}
+            </div>
+          </div>
+          {rec.mcc_reference && <div className="detail-field"><div className="lbl">MCC Reference</div><div className="val mono">{rec.mcc_reference}</div></div>}
         </div>
-      </div>
 
-      {/* FOI tracking (if authorised+) */}
-      {['Authorised', 'Submitted to FOI', 'Closed'].includes(rec.status) && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="section-title">FOI Submission</div>
-          <div className="detail-grid">
-            <div>
-              <div className="detail-field"><div className="lbl">Date Authorised</div><div className="val">{fmtDt(rec.manager_signed_at)}</div></div>
+        <div className="detail-field">
+          <div className="lbl">Why a Rectification Interval Extension is Required</div>
+          <div className="val" style={{ whiteSpace: 'pre-wrap' }}>{rec.extension_reason}</div>
+        </div>
+
+        {/* Applicant signature */}
+        <div className="sig-block" style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          <div className="sig-title">Applicant Signature</div>
+          {rec.applicant_signed_at ? (
+            <>
+              {rec.applicant_signature && <div className="sig-img"><img src={rec.applicant_signature} alt="Applicant signature" /></div>}
+              <div className="sig-name">{rec.applicant_name}</div>
+              {rec.applicant_position && <div className="sig-date">{rec.applicant_position}</div>}
+              <div className="sig-date">{fmtDt(rec.applicant_signed_at)}</div>
+              <SigSource source={rec.applicant_sig_source} />
+            </>
+          ) : (
+            <div className="sig-pending">
+              <div style={{ marginBottom: 8 }}>Not yet signed</div>
+              {rec.status === 'Draft' && (profile?.can_sign_applicant ? (
+                <button className="btn btn-primary btn-sm" onClick={() => setSigning('applicant')}>Sign as Applicant</button>
+              ) : (
+                <div className="sig-note">You are not authorised to sign as applicant</div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>{/* end Part 2 */}
+      </div>{/* end rie-parts-row */}
+
+      {/* PART 3 — AUTHORISATION */}
+      <div className="rie-part-card" style={{ marginBottom: 16 }}>
+        <div className="rie-part-header">Part 3 — Authorisation</div>
+
+        {rec.manager_signed_at ? (
+          <>
+            <div className="detail-grid-wide">
+              <div className="detail-field"><div className="lbl">RIE Reference</div><div className="val mono">{rec.ref_number || '—'}</div></div>
               <div className="detail-field">
-                <div className="lbl">FOI Submission Due (10 days)</div>
-                <div className={`val ${foiDays !== null && foiDays < 0 ? 'over' : foiDays !== null && foiDays <= 3 ? 'warn' : ''}`}>
-                  {fmtDate(rec.foi_due_at)}
-                  {foiDays !== null && rec.status === 'Authorised' && (
-                    <span style={{ marginLeft: 6, fontSize: 11 }}>
-                      ({foiDays < 0 ? `${Math.abs(foiDays)}d overdue` : `${foiDays}d remaining`})
-                    </span>
-                  )}
+                <div className="lbl">Latest Date for Rectification</div>
+                <div className={`val ${extDays !== null && extDays < 0 ? 'over' : extDays !== null && extDays <= 3 ? 'warn' : ''}`}>
+                  {fmtDate(rec.extension_expiry)}
                 </div>
               </div>
-            </div>
-            <div>
-              <div className="detail-field">
-                <div className="lbl">Date Submitted to FOI</div>
-                <div className="val">{rec.foi_submitted_at ? fmtDt(rec.foi_submitted_at) : <span style={{ color: 'var(--text-3)' }}>Pending</span>}</div>
+              <div className="detail-field"><div className="lbl">Authorising Manager</div><div className="val">{rec.manager_name}</div></div>
+              <div>
+                {rec.manager_position && <div className="detail-field"><div className="lbl">Position</div><div className="val">{rec.manager_position}</div></div>}
+                <div className="detail-field"><div className="lbl">Date Authorised</div><div className="val">{fmtDt(rec.manager_signed_at)}</div></div>
+                <div className="detail-field"><div className="lbl">Duration Authorised</div><div className="val">{rec.extension_days} days</div></div>
               </div>
             </div>
+
+            {rec.manager_comments && (
+              <div className="detail-field">
+                <div className="lbl">Manager Comments</div>
+                <div className="val" style={{ whiteSpace: 'pre-wrap' }}>{rec.manager_comments}</div>
+              </div>
+            )}
+
+            <div className="sig-block" style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <div className="sig-title">Manager Signature</div>
+              {rec.manager_signature && <div className="sig-img"><img src={rec.manager_signature} alt="Manager signature" /></div>}
+              <div className="sig-name">{rec.manager_name}</div>
+              {rec.manager_position && <div className="sig-date">{rec.manager_position}</div>}
+              <div className="sig-date">{fmtDt(rec.manager_signed_at)}</div>
+              <SigSource source={rec.manager_sig_source} />
+            </div>
+
+            {/* FOI notice */}
+            {['Authorised', 'Submitted to FOI', 'Closed'].includes(rec.status) && (
+              <div className="foi-notice">
+                <span className="foi-notice-label">FOI 10-Day Notice</span>
+                This RIE must be submitted to the Flight Operations Inspector within 10 days of authorisation.
+                {' '}Due: <strong>{fmtDate(rec.foi_due_at)}</strong>
+                {rec.foi_submitted_at && <> · Submitted: <strong>{fmtDt(rec.foi_submitted_at)}</strong></>}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="sig-pending">
+            {rec.status === 'Pending Manager' ? (
+              <>
+                <div style={{ marginBottom: 8 }}>Awaiting manager authorisation</div>
+                {rec.applicant_id === profile?.id ? (
+                  <div className="sig-note">You signed as applicant — a different manager must authorise</div>
+                ) : profile?.can_sign_manager ? (
+                  <button className="btn btn-primary btn-sm" onClick={() => setSigning('manager')}>Authorise as Manager</button>
+                ) : (
+                  <div className="sig-note">You are not authorised to sign as manager</div>
+                )}
+              </>
+            ) : (
+              <div className="page-note">Awaiting applicant signature first (Part 2 above)</div>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      {/* RIE CLOSURE */}
+      <div className="rie-part-card rie-closure" style={{ marginBottom: 16 }}>
+        <div className="rie-part-header">RIE Closure</div>
+
+        {isClosed ? (
+          <div className="detail-grid-wide">
+            <div className="detail-field"><div className="lbl">RIE Raised SRP No</div><div className="val mono">{rec.srp_raised || '—'}</div></div>
+            <div className="detail-field"><div className="lbl">Closure Date</div><div className="val">{fmtDate(rec.closure_date)}</div></div>
+            <div className="detail-field"><div className="lbl">Clearance SRP No</div><div className="val mono">{rec.srp_clearance || '—'}</div></div>
+            <div className="detail-field"><div className="lbl">RIE Closed</div><div className="val"><span className="badge badge-closed">✓ Closed</span></div></div>
+          </div>
+        ) : (
+          <>
+            {showCloseForm ? (
+              <div>
+                <div className="field-row" style={{ marginBottom: 8 }}>
+                  <div className="field">
+                    <label>Closure Date</label>
+                    <input type="date" value={closeForm.closure_date} onChange={e => setCloseForm(f => ({ ...f, closure_date: e.target.value }))} />
+                  </div>
+                  <div className="field">
+                    <label>Clearance SRP No</label>
+                    <input value={closeForm.srp_clearance} onChange={e => setCloseForm(f => ({ ...f, srp_clearance: e.target.value }))} placeholder="e.g. SRP-2026-002" />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setShowCloseForm(false)}>Cancel</button>
+                  <button className="btn btn-danger btn-sm" onClick={handleClose}>Confirm Close Record</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span className="page-note" style={{ margin: 0 }}>Record is not yet closed.</span>
+                <button className="btn btn-danger btn-sm" onClick={() => setShowCloseForm(true)}>Close Record</button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Action bar */}
       <div className="action-bar">
@@ -330,11 +380,6 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
         {rec.status === 'Authorised' && (
           <button className="btn btn-success" onClick={handleMarkFoi}>
             Mark Submitted to FOI
-          </button>
-        )}
-        {rec.status !== 'Closed' && (
-          <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={handleClose}>
-            Close Record
           </button>
         )}
       </div>

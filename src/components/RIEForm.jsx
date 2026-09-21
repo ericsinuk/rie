@@ -14,12 +14,14 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function daysUntil(iso) {
-  if (!iso) return null
-  return Math.ceil((new Date(iso) - new Date()) / 86400000)
-}
+const RIE_RULES = [
+  { key: 'A', text: 'The defect must be re-inspected at each regular flight check.' },
+  { key: 'B', text: 'The defect must not exceed the maximum rectification interval specified in the MEL.' },
+  { key: 'C', text: 'The aircraft must be operated in compliance with all associated (O) and (M) procedures.' },
+  { key: 'D', text: 'The RIE is subject to review at each subsequent base maintenance visit or as directed by the Maintenance Manager.' },
+]
 
-export default function RIEForm({ profile, editId, onBack, onSaved }) {
+export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = [] }) {
   const [loading, setLoading] = useState(!!editId)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -30,14 +32,18 @@ export default function RIEForm({ profile, editId, onBack, onSaved }) {
     mel_item_ref: '',
     mel_chapter_title: '',
     defect_description: '',
+    reason_not_rectifying: '',
     mel_category: 'C',
     date_defect_found: '',
-    date_mel_start: '',
-    extension_days: '5',
-    extension_reason: '',
-    additional_limitations: '',
-    mcc_reference: '',
+    srp_raised: '',
     ref_addp: '',
+    operational_restriction: false,
+    // Part 2
+    applicant_position: '',
+    extension_days: '10',
+    extension_reason: '',
+    mcc_reference: '',
+    additional_limitations: '',
   })
 
   useEffect(() => {
@@ -49,14 +55,17 @@ export default function RIEForm({ profile, editId, onBack, onSaved }) {
           mel_item_ref: data.mel_item_ref || '',
           mel_chapter_title: data.mel_chapter_title || '',
           defect_description: data.defect_description || '',
+          reason_not_rectifying: data.reason_not_rectifying || '',
           mel_category: data.mel_category || 'C',
           date_defect_found: data.date_defect_found || '',
-          date_mel_start: data.date_mel_start || '',
+          srp_raised: data.srp_raised || '',
+          ref_addp: data.ref_addp || '',
+          operational_restriction: !!data.operational_restriction,
+          applicant_position: data.applicant_position || '',
           extension_days: String(data.extension_days || '5'),
           extension_reason: data.extension_reason || '',
-          additional_limitations: data.additional_limitations || '',
           mcc_reference: data.mcc_reference || '',
-          ref_addp: data.ref_addp || '',
+          additional_limitations: data.additional_limitations || '',
         })
         setLoading(false)
       })
@@ -65,30 +74,27 @@ export default function RIEForm({ profile, editId, onBack, onSaved }) {
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })) }
 
-  const melExpiry = form.date_mel_start && form.mel_category
-    ? addDays(form.date_mel_start, MEL_DAYS[form.mel_category])
+  const melExpiry = form.date_defect_found && form.mel_category
+    ? addDays(form.date_defect_found, MEL_DAYS[form.mel_category])
     : null
-
-  const extExpiry = melExpiry && form.extension_days
-    ? addDays(melExpiry, parseInt(form.extension_days) || 0)
-    : null
-
-  const daysToExtExpiry = daysUntil(extExpiry)
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     if (!form.aircraft_registration.trim()) return setError('Aircraft registration is required')
-    if (!form.aircraft_type.trim()) return setError('Aircraft type is required')
     if (!form.mel_item_ref.trim()) return setError('MEL item reference is required')
-    if (!form.defect_description.trim()) return setError('Defect description is required')
-    if (!form.date_defect_found) return setError('Date defect found is required')
-    if (!form.date_mel_start) return setError('MEL interval start date is required')
-    if (!form.extension_days || parseInt(form.extension_days) < 1) return setError('Extension days must be at least 1')
-    if (!form.extension_reason.trim()) return setError('Justification for extension is required')
+    if (!form.defect_description.trim()) return setError('Detail of defect is required')
+    if (!form.date_defect_found) return setError('Date of defect is required')
+    if (!form.extension_reason.trim()) return setError('Justification (Why RIE Required) is required')
+    if (!form.extension_days || parseInt(form.extension_days) < 1) return setError('Extension duration must be at least 1 day')
 
     setSaving(true)
-    const payload = { ...form, extension_days: parseInt(form.extension_days) }
+    const payload = {
+      ...form,
+      date_mel_start: form.date_defect_found,
+      extension_days: parseInt(form.extension_days),
+      operational_restriction: form.operational_restriction ? 1 : 0,
+    }
     const { data, error: err } = editId
       ? await rie.update(editId, payload)
       : await rie.create(payload)
@@ -101,7 +107,7 @@ export default function RIEForm({ profile, editId, onBack, onSaved }) {
   if (loading) return <div className="loading">Loading…</div>
 
   return (
-    <div className="page-sm">
+    <div className="page-wide">
       <div className="form-header">
         <button className="btn btn-ghost btn-sm" onClick={onBack}>← Back</button>
         <h1>{editId ? 'Edit RIE' : 'New Rectification Interval Extension'}</h1>
@@ -109,141 +115,158 @@ export default function RIEForm({ profile, editId, onBack, onSaved }) {
 
       <form onSubmit={handleSubmit}>
 
-        {/* Section 1 */}
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="section-title">1. Aircraft &amp; Defect Details</div>
+        <div className="rie-parts-row">
+        {/* PART 1 — MEL DEFECT */}
+        <div className="rie-part-card">
+          <div className="rie-part-header">Part 1 — MEL Defect</div>
 
           <div className="field-row">
             <div className="field">
-              <label>Aircraft Registration *</label>
-              <input value={form.aircraft_registration} onChange={e => set('aircraft_registration', e.target.value.toUpperCase())} placeholder="G-DHLA" required />
+              <label>Date of Defect *</label>
+              <input type="date" value={form.date_defect_found} onChange={e => set('date_defect_found', e.target.value)} required />
             </div>
             <div className="field">
-              <label>Aircraft Type *</label>
-              <input value={form.aircraft_type} onChange={e => set('aircraft_type', e.target.value)} placeholder="B757-200F" required />
+              <label>Aircraft Registration *</label>
+              {fleetList.length > 0 ? (
+                <select
+                  value={form.aircraft_registration}
+                  onChange={e => {
+                    const ac = fleetList.find(f => f.registration === e.target.value)
+                    setForm(f => ({ ...f, aircraft_registration: e.target.value, aircraft_type: ac ? ac.aircraft_type : f.aircraft_type }))
+                  }}
+                  required
+                >
+                  <option value="">— Select aircraft —</option>
+                  {fleetList.map(f => (
+                    <option key={f.id} value={f.registration}>{f.registration}</option>
+                  ))}
+                </select>
+              ) : (
+                <input value={form.aircraft_registration} onChange={e => set('aircraft_registration', e.target.value.toUpperCase())} placeholder="G-DHLA" required />
+              )}
+            </div>
+            <div className="field">
+              <label>Aircraft Type</label>
+              <div className="computed-field">{form.aircraft_type || '—'}</div>
             </div>
           </div>
 
-          <div className="field-row">
+          <div className="field">
+            <label>Detail of Defect *</label>
+            <textarea value={form.defect_description} onChange={e => set('defect_description', e.target.value)} rows={3}
+              placeholder="Describe the defect in detail…" required />
+          </div>
+
+          <div className="field">
+            <label>Reason for not rectifying *</label>
+            <textarea value={form.reason_not_rectifying} onChange={e => set('reason_not_rectifying', e.target.value)} rows={2}
+              placeholder="Why cannot the defect be rectified now (e.g. part not available, AOG situation)…" />
+          </div>
+
+          <div className="field-row" style={{ alignItems: 'flex-end' }}>
             <div className="field">
-              <label>MEL Item Reference *</label>
+              <label>MEL Reference No *</label>
               <input value={form.mel_item_ref} onChange={e => set('mel_item_ref', e.target.value)} placeholder="24-20-01A" required />
             </div>
             <div className="field">
-              <label>MEL Chapter / Title</label>
+              <label>MEL System Title</label>
               <input value={form.mel_chapter_title} onChange={e => set('mel_chapter_title', e.target.value)} placeholder="AC Electrical Power" />
             </div>
           </div>
 
           <div className="field">
-            <label>Defect Description *</label>
-            <textarea
-              value={form.defect_description}
-              onChange={e => set('defect_description', e.target.value)}
-              rows={3}
-              placeholder="Describe the defect/fault in detail…"
-              required
-            />
-          </div>
-        </div>
-
-        {/* Section 2 */}
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="section-title">2. MEL Interval &amp; Extension</div>
-
-          <div className="field">
-            <label>MEL Category *</label>
+            <label>MEL Interval *</label>
             <div className="cat-select">
               {['B', 'C', 'D'].map(c => (
-                <button
-                  key={c} type="button"
+                <button key={c} type="button"
                   className={`cat-btn ${form.mel_category === c ? `sel-${c}` : ''}`}
-                  onClick={() => set('mel_category', c)}
-                >
-                  {c}
-                  <span className="cat-label">{MEL_DAYS[c]} days</span>
+                  onClick={() => setForm(f => ({ ...f, mel_category: c, extension_days: String(MEL_DAYS[c]) }))}>
+                  {c}<span className="cat-label">{MEL_DAYS[c]} days</span>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="field-row">
-            <div className="field">
-              <label>Date Defect Found *</label>
-              <input type="date" value={form.date_defect_found} onChange={e => set('date_defect_found', e.target.value)} required />
-            </div>
-            <div className="field">
-              <label>MEL Interval Start Date *</label>
-              <input type="date" value={form.date_mel_start} onChange={e => set('date_mel_start', e.target.value)} required />
-            </div>
-          </div>
-
           <div className="field">
-            <label>Extension Duration (days) *</label>
-            <input
-              type="number" min="1" max="365"
-              value={form.extension_days}
-              onChange={e => set('extension_days', e.target.value)}
-              required
-            />
-          </div>
-
-          {melExpiry && (
-            <div className="mel-interval-info">
-              <div className="item">
-                <span className="lbl">MEL Interval Expiry</span>
-                <span className="val">{fmtDate(melExpiry)}</span>
-              </div>
-              <div className="item">
-                <span className="lbl">Extension Expiry</span>
-                <span className={`val ${daysToExtExpiry !== null && daysToExtExpiry < 0 ? 'over' : daysToExtExpiry !== null && daysToExtExpiry <= 3 ? 'warn' : ''}`}>
-                  {fmtDate(extExpiry)}
-                  {daysToExtExpiry !== null && (
-                    <span style={{ marginLeft: 6, fontSize: 11 }}>
-                      ({daysToExtExpiry < 0 ? `${Math.abs(daysToExtExpiry)}d overdue` : `${daysToExtExpiry}d remaining`})
-                    </span>
-                  )}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Section 3 */}
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="section-title">3. Justification</div>
-
-          <div className="field">
-            <label>Reason for Extension *</label>
-            <textarea
-              value={form.extension_reason}
-              onChange={e => set('extension_reason', e.target.value)}
-              rows={4}
-              placeholder="Explain why the defect cannot be rectified within the MEL interval…"
-              required
-            />
-          </div>
-
-          <div className="field">
-            <label>Additional Operational Limitations / Conditions</label>
-            <textarea
-              value={form.additional_limitations}
-              onChange={e => set('additional_limitations', e.target.value)}
-              rows={2}
-              placeholder="Any conditions or restrictions that apply during the extension period…"
-            />
+            <label>MEL Expiry Date</label>
+            <div className="computed-field">{melExpiry ? fmtDate(melExpiry) : 'Set date of defect and interval above'}</div>
           </div>
 
           <div className="field-row">
             <div className="field">
-              <label>MCC / Technical Reference</label>
+              <label>SRP No</label>
+              <input value={form.srp_raised} onChange={e => set('srp_raised', e.target.value)} placeholder="e.g. SRP-2026-001" />
+            </div>
+            <div className="field">
+              <label>MDDR / "P" No</label>
+              <input value={form.ref_addp} onChange={e => set('ref_addp', e.target.value)} placeholder="P-ADD reference" />
+            </div>
+          </div>
+
+          <div className="field">
+            <label className="check-label">
+              <input type="checkbox" checked={form.operational_restriction} onChange={e => set('operational_restriction', e.target.checked)} />
+              Operational Restriction applies
+            </label>
+            {form.operational_restriction && (
+              <textarea value={form.additional_limitations} onChange={e => set('additional_limitations', e.target.value)} rows={2}
+                placeholder="Describe the operational restriction or limitation…" style={{ marginTop: 6 }} />
+            )}
+          </div>
+        </div>{/* end Part 1 */}
+
+        {/* PART 2 — RIE APPLICATION */}
+        <div className="rie-part-card">
+          <div className="rie-part-header">Part 2 — RIE Application</div>
+
+          <div className="field-row">
+            <div className="field">
+              <label>Name of Applicant</label>
+              <div className="computed-field">{profile?.full_name || '—'}</div>
+            </div>
+            <div className="field">
+              <label>Position</label>
+              <input value={form.applicant_position} onChange={e => set('applicant_position', e.target.value)} placeholder="e.g. MOC Engineer" />
+            </div>
+          </div>
+
+          <div className="field">
+            <label>Why a Rectification Interval Extension is Required *</label>
+            <textarea value={form.extension_reason} onChange={e => set('extension_reason', e.target.value)} rows={4}
+              placeholder="Justify why an extension to the MEL interval is required…" required />
+          </div>
+
+          <div className="field-row">
+            <div className="field">
+              <label>Requested Duration (days) *</label>
+              <input type="number" min="1" max="365" value={form.extension_days}
+                onChange={e => set('extension_days', e.target.value)} required />
+            </div>
+            <div className="field">
+              <label>MCC Reference</label>
               <input value={form.mcc_reference} onChange={e => set('mcc_reference', e.target.value)} placeholder="MCC-2026-xxxx" />
             </div>
-            <div className="field">
-              <label>ADD "P" No</label>
-              <input value={form.ref_addp} onChange={e => set('ref_addp', e.target.value)} placeholder="PADD reference" />
-            </div>
           </div>
+
+          <div className="rie-rules-box">
+            <div className="rie-rules-title">RIE Conditions — the following apply to all approved RIEs:</div>
+            {RIE_RULES.map(r => (
+              <div key={r.key} className="rie-rule-row">
+                <span className="rie-rule-key">{r.key}.</span>
+                <span>{r.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>{/* end Part 2 */}
+        </div>{/* end rie-parts-row */}
+
+        {/* PART 3 — placeholder (completed at signing) */}
+        <div className="rie-part-card rie-part-readonly" style={{ marginBottom: 16 }}>
+          <div className="rie-part-header">Part 3 — Authorisation</div>
+          <p className="page-note" style={{ margin: 0 }}>
+            Part 3 is completed when the applicant and authorising manager sign the RIE.
+            Duration, latest rectification date, signatures, and manager comments are recorded at that stage.
+          </p>
         </div>
 
         {error && <div className="auth-error" style={{ marginBottom: 12 }}>{error}</div>}

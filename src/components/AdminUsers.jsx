@@ -7,7 +7,7 @@ const RIGHTS = [
   { key: 'is_admin',           label: 'Admin' },
 ]
 
-export default function AdminUsers({ profile, onBack, onSelfChange }) {
+export default function AdminUsers({ profile, onBack, onSelfChange, embedded = false }) {
   const [users, setUsers] = useState(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(null)
@@ -31,18 +31,27 @@ export default function AdminUsers({ profile, onBack, onSelfChange }) {
   }
 
   return (
-    <div className="page">
-      <div className="form-header">
-        <button className="btn btn-ghost btn-sm" onClick={onBack}>← Back</button>
-        <h1>Users &amp; Signatory Rights</h1>
-      </div>
-      <p className="page-note">
-        Only people ticked here can sign. Nobody can sign both sides of the same RIE, even if they hold both rights.
-        Department is what the person entered at registration and grants nothing.
-      </p>
+    <div className={embedded ? '' : 'page'}>
+      {!embedded && (
+        <>
+          <div className="form-header">
+            <button className="btn btn-ghost btn-sm" onClick={onBack}>← Back</button>
+            <h1>Users &amp; Signatory Rights</h1>
+          </div>
+          <p className="page-note">
+            Only people ticked here can sign. Nobody can sign both sides of the same RIE, even if they hold both rights.
+          </p>
+        </>
+      )}
+      {embedded && (
+        <p className="page-note" style={{ marginBottom: 16 }}>
+          Only people ticked here can sign. Nobody can sign both sides of the same RIE, even if they hold both rights.
+          Department is what the person entered at registration and grants nothing.
+        </p>
+      )}
       {error && <div className="auth-error" style={{ marginBottom: 12 }}>{error}</div>}
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className={embedded ? '' : 'card'} style={embedded ? {} : { padding: 0, overflow: 'hidden' }}>
         {!users ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>Loading…</div>
         ) : (

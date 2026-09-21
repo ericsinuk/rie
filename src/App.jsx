@@ -4,9 +4,9 @@ import AuthPage from './components/AuthPage.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import RIEForm from './components/RIEForm.jsx'
 import RIEDetail from './components/RIEDetail.jsx'
-import AdminUsers from './components/AdminUsers.jsx'
+import AdminPanel from './components/AdminPanel.jsx'
 import SignaturePad from './components/SignaturePad.jsx'
-import { profiles } from './lib/api.js'
+import { profiles, fleet as fleetApi } from './lib/api.js'
 import dhlLogo from './assets/dhl-logo.svg'
 import './styles/index.css'
 
@@ -15,6 +15,7 @@ export default function App() {
   const [profile, setProfile] = useState(null)
   const [view, setView] = useState({ page: 'dashboard' })
   const [enrolling, setEnrolling] = useState(false)
+  const [fleetList, setFleetList] = useState([])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -33,6 +34,11 @@ export default function App() {
     const { data } = await profiles.get(userId)
     setProfile(data)
   }
+
+  useEffect(() => {
+    if (!session) return
+    fleetApi.list().then(({ data }) => { if (data) setFleetList(data.filter(f => f.active)) })
+  }, [session])
 
   async function saveSignature({ signature, password }) {
     const { data, error } = await profiles.saveSignature(signature, password)
@@ -64,7 +70,7 @@ export default function App() {
         </div>
         <div style={{ flex: 1 }} />
         {profile?.is_admin && (
-          <button className="nav-btn" onClick={() => setView({ page: 'users' })}>Users</button>
+          <button className="nav-btn" onClick={() => setView({ page: 'admin' })}>Admin</button>
         )}
         {canSign && (
           <button className="nav-btn" onClick={() => setEnrolling(true)}>
@@ -89,6 +95,7 @@ export default function App() {
       {view.page === 'new' && (
         <RIEForm
           profile={profile}
+          fleetList={fleetList}
           onBack={() => setView({ page: 'dashboard' })}
           onSaved={(id) => setView({ page: 'detail', id })}
         />
@@ -96,13 +103,14 @@ export default function App() {
       {view.page === 'edit' && (
         <RIEForm
           profile={profile}
+          fleetList={fleetList}
           editId={view.id}
           onBack={() => setView({ page: 'detail', id: view.id })}
           onSaved={(id) => setView({ page: 'detail', id })}
         />
       )}
-      {view.page === 'users' && profile?.is_admin && (
-        <AdminUsers
+      {view.page === 'admin' && profile?.is_admin && (
+        <AdminPanel
           profile={profile}
           onBack={() => setView({ page: 'dashboard' })}
           onSelfChange={() => loadProfile(profile.id)}
