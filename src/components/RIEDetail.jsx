@@ -87,6 +87,28 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
 
   return (
     <div className="page-wide">
+      {/* Sticky navigation + actions */}
+      <div className="sticky-bar">
+        <button className="btn btn-ghost btn-sm" onClick={onBack}>← Dashboard</button>
+        <h1 className="bar-ref">{rec.ref_number || 'Draft'}</h1>
+        <div className="spacer" />
+        <div className="bar-actions">
+          {rec.status === 'Draft' && (
+            <button className="btn btn-ghost" onClick={() => onEdit(id)}>Edit</button>
+          )}
+          {(rec.status === 'Authorised' || rec.status === 'Submitted to FOI' || rec.status === 'Closed') && (
+            <button className="btn btn-primary" onClick={() => generateRIEPdf(rec).catch(e => setError(e.message || 'PDF generation failed'))}>
+              ⬇ Download PDF
+            </button>
+          )}
+          {rec.status === 'Authorised' && (
+            <button className="btn btn-success" onClick={handleMarkFoi}>
+              Mark Submitted to FOI
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Header */}
       <div className="detail-header">
         <div className="meta">
@@ -363,24 +385,6 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
               </div>
             )}
           </>
-        )}
-      </div>
-
-      {/* Action bar */}
-      <div className="action-bar">
-        <button className="btn btn-ghost" onClick={onBack}>← Dashboard</button>
-        {rec.status === 'Draft' && (
-          <button className="btn btn-ghost" onClick={() => onEdit(id)}>Edit</button>
-        )}
-        {(rec.status === 'Authorised' || rec.status === 'Submitted to FOI' || rec.status === 'Closed') && (
-          <button className="btn btn-primary btn-lg" onClick={() => generateRIEPdf(rec).catch(e => setError(e.message || 'PDF generation failed'))}>
-            ⬇ Download PDF
-          </button>
-        )}
-        {rec.status === 'Authorised' && (
-          <button className="btn btn-success" onClick={handleMarkFoi}>
-            Mark Submitted to FOI
-          </button>
         )}
       </div>
 

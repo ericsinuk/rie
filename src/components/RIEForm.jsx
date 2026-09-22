@@ -108,12 +108,20 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
 
   return (
     <div className="page-wide">
-      <div className="form-header">
-        <button className="btn btn-ghost btn-sm" onClick={onBack}>← Back</button>
+      <div className="sticky-bar">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onBack}>← Back</button>
         <h1>{editId ? 'Edit RIE' : 'New Rectification Interval Extension'}</h1>
+        <div className="spacer" />
+        <div className="bar-actions">
+          <button type="submit" form="rie-form" className="btn btn-primary" disabled={saving}>
+            {saving ? 'Saving…' : editId ? 'Save Changes' : 'Save as Draft'}
+          </button>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      {error && <div className="auth-error" style={{ marginBottom: 16 }}>{error}</div>}
+
+      <form id="rie-form" onSubmit={handleSubmit}>
 
         <div className="rie-parts-row">
         {/* PART 1 — MEL DEFECT */}
@@ -269,14 +277,6 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
           </p>
         </div>
 
-        {error && <div className="auth-error" style={{ marginBottom: 12 }}>{error}</div>}
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button type="button" className="btn btn-ghost" onClick={onBack}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : editId ? 'Save Changes' : 'Save as Draft'}
-          </button>
-        </div>
       </form>
     </div>
   )

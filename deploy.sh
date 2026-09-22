@@ -97,7 +97,11 @@ elif [ -n "$NGINX_CONF" ]; then
 NGINXEOF
     echo "Nginx blocks added to $NGINX_CONF"
   fi
-  nginx -t && systemctl reload nginx
+  if systemctl is-active --quiet nginx; then
+    nginx -t && systemctl reload nginx
+  else
+    echo "nginx installed but not running — skipping reload (Caddy serves this host)"
+  fi
 fi
 
 echo ""

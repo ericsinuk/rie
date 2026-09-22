@@ -21,6 +21,7 @@
   --cat-d: #22c55e;
   --radius: 8px;
   --radius-sm: 4px;
+  --header-h: 52px;
   font-size: 14px;
 }
 
@@ -97,7 +98,7 @@ select { appearance: none; }
 /* ── Layout ── */
 .app-header {
   background: var(--surface); border-bottom: 1px solid var(--border);
-  padding: 0 20px; height: 52px; display: flex; align-items: center;
+  padding: 0 20px; height: var(--header-h); display: flex; align-items: center;
   gap: 12px; position: sticky; top: 0; z-index: 100;
 }
 .app-header .logo {
@@ -107,6 +108,12 @@ select { appearance: none; }
 .app-header .logo img { display: block; height: 13px; width: auto; }
 .app-header .title { font-weight: 700; font-size: 15px; flex: 1; }
 .app-header .subtitle { font-size: 11px; color: var(--text-3); }
+
+/* Header content must not wrap — .sticky-bar is pinned at exactly --header-h */
+@media (max-width: 700px) {
+  .app-header { padding: 0 12px; gap: 8px; }
+  .app-header > div:first-of-type { display: none; }
+}
 
 .page { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
 .page-sm { max-width: 700px; margin: 0 auto; padding: 24px 20px; }
@@ -202,6 +209,29 @@ select { appearance: none; }
   display: flex; align-items: center; gap: 12px; margin-bottom: 24px;
 }
 .form-header h1 { font-size: 20px; font-weight: 700; flex: 1; }
+
+/* Sticky bar — navigation + actions, pinned under the app header */
+.sticky-bar {
+  position: sticky; top: var(--header-h); z-index: 90;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg);
+  margin: -24px -20px 20px; padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.sticky-bar h1 { font-size: 20px; font-weight: 700; }
+.sticky-bar .bar-ref {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--primary); letter-spacing: 0.5px;
+}
+.sticky-bar .spacer { flex: 1; }
+.sticky-bar .bar-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+@media (max-width: 700px) {
+  .sticky-bar { flex-wrap: wrap; gap: 8px; padding: 10px 20px; margin: -24px -20px 16px; }
+  .sticky-bar h1 { font-size: 15px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sticky-bar .spacer { display: none; }
+  .sticky-bar .bar-actions { margin-left: auto; }
+}
 
 .mel-interval-info {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
