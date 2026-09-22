@@ -394,7 +394,12 @@ app.get('/rie', mustAuth, (_req, res) => {
     SELECT r.*, p.full_name AS created_by_name
     FROM rie_records r
     LEFT JOIN profiles p ON p.id = r.created_by
-    ORDER BY r.created_at DESC
+    ORDER BY
+      CASE WHEN r.ref_number IS NOT NULL
+        THEN CAST(SUBSTR(r.ref_number, INSTR(r.ref_number, 'RIE/') + 4) AS INTEGER)
+        ELSE 0
+      END DESC,
+      r.created_at DESC
   `).all()
   res.json(rows)
 })
