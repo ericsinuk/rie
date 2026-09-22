@@ -12,6 +12,7 @@ export default function AdminAircraft() {
   const [editType, setEditType] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showRetired, setShowRetired] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -58,13 +59,19 @@ export default function AdminAircraft() {
 
   const active = rows.filter(r => r.active)
   const inactive = rows.filter(r => !r.active)
+  const visible = showRetired ? rows : active
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{active.length} active aircraft</span>
-          {inactive.length > 0 && <span style={{ fontSize: 12, color: 'var(--text-3)', marginLeft: 10 }}>· {inactive.length} retired</span>}
+          {inactive.length > 0 && (
+            <label className="check-label" style={{ margin: 0, textTransform: 'none', fontSize: 12, color: 'var(--text-3)' }}>
+              <input type="checkbox" checked={showRetired} onChange={e => setShowRetired(e.target.checked)} />
+              Show {inactive.length} retired
+            </label>
+          )}
         </div>
         {!adding && (
           <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>+ Add Aircraft</button>
@@ -98,7 +105,7 @@ export default function AdminAircraft() {
           </tr>
         </thead>
         <tbody>
-          {rows.map(row => (
+          {visible.map(row => (
             <tr key={row.id} className={row.active ? '' : 'fleet-inactive'}>
               {editId === row.id ? (
                 <>
