@@ -38,15 +38,15 @@ export default function RIECharts({ records }) {
   const open = records.filter(r => r.status !== 'Closed').length
 
   const thisQ = records.filter(r => {
-    if (!r.created_at) return false
-    const d = new Date(r.created_at)
-    return d.getFullYear() === cYear && quarterOf(r.created_at) === cQ
+    if (!r.date_defect_found) return false
+    const d = new Date(r.date_defect_found)
+    return d.getFullYear() === cYear && quarterOf(r.date_defect_found) === cQ
   }).length
 
   const lastQ = records.filter(r => {
-    if (!r.created_at) return false
-    const d = new Date(r.created_at)
-    return d.getFullYear() === lYear && quarterOf(r.created_at) === lQ
+    if (!r.date_defect_found) return false
+    const d = new Date(r.date_defect_found)
+    return d.getFullYear() === lYear && quarterOf(r.date_defect_found) === lQ
   }).length
 
   const overdue = records.filter(r =>
@@ -70,8 +70,8 @@ export default function RIECharts({ records }) {
     const map = {}
     for (let y = base; y <= cYear; y++) map[y] = 0
     for (const r of chartRecords) {
-      if (!r.created_at) continue
-      const y = new Date(r.created_at).getFullYear()
+      if (!r.date_defect_found) continue
+      const y = new Date(r.date_defect_found).getFullYear()
       if (map[y] !== undefined) map[y]++
     }
     return Object.entries(map).map(([year, count]) => ({ year: String(year), count }))
@@ -84,8 +84,8 @@ export default function RIECharts({ records }) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
       const label = d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })
       const count = chartRecords.filter(r => {
-        if (!r.created_at) return false
-        const rd = new Date(r.created_at)
+        if (!r.date_defect_found) return false
+        const rd = new Date(r.date_defect_found)
         return rd.getFullYear() === d.getFullYear() && rd.getMonth() === d.getMonth()
       }).length
       result.push({ month: label, count })
@@ -114,12 +114,12 @@ export default function RIECharts({ records }) {
         <div className="kpi-card">
           <div className="kpi-label">This Quarter (Q{cQ} {cYear})</div>
           <div className="kpi-value">{thisQ}</div>
-          <div className="kpi-sub">RIEs raised</div>
+          <div className="kpi-sub">by date of defect</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Last Quarter (Q{lQ} {lYear})</div>
           <div className="kpi-value">{lastQ}</div>
-          <div className="kpi-sub">RIEs raised</div>
+          <div className="kpi-sub">by date of defect</div>
         </div>
         <div className={`kpi-card ${overdue > 0 ? 'kpi-danger' : ''}`}>
           <div className="kpi-label">Overdue</div>
