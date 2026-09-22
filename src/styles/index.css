@@ -456,6 +456,12 @@ select {
 .check-label input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--primary); cursor: pointer; }
 
 /* RIE rules reminder box */
+.rie-info-box {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 12px;
+  font-size: 12px; color: var(--text-2);
+}
+
 .rie-rules-box {
   margin-top: 12px;
   background: var(--bg-2);

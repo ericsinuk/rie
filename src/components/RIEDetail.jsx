@@ -381,7 +381,9 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span className="page-note" style={{ margin: 0 }}>Record is not yet closed.</span>
-                <button className="btn btn-danger btn-sm" onClick={() => setShowCloseForm(true)}>Close Record</button>
+                {profile?.is_admin && (
+                  <button className="btn btn-danger btn-sm" onClick={() => setShowCloseForm(true)}>Close Record</button>
+                )}
               </div>
             )}
           </>
@@ -393,6 +395,7 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
         <SignaturePad
           mode={signing}
           profile={profile}
+          maxDays={MEL_DAYS[rec.mel_category]}
           onSign={handleSign}
           onCancel={() => setSigning(null)}
         />

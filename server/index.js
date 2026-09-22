@@ -430,22 +430,25 @@ app.get('/rie', mustAuth, (_req, res) => {
 })
 
 app.post('/rie', mustAuth, (req, res) => {
+  const me = getProfile(req.user.id)
+  if (!me?.can_sign_applicant) return res.status(403).json({ error: 'You are not authorised to create RIE records' })
+
   const {
     aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
     defect_description, reason_not_rectifying, mel_category, date_defect_found, date_mel_start,
-    extension_days, extension_reason, additional_limitations, mcc_reference,
+    extension_reason, additional_limitations, mcc_reference,
     ref_addp, applicant_position, operational_restriction, srp_raised
   } = req.body
   if (!aircraft_registration || !aircraft_type || !mel_item_ref || !defect_description ||
-      !mel_category || !date_defect_found || !extension_days || !extension_reason)
+      !mel_category || !date_defect_found || !extension_reason)
     return res.status(400).json({ error: 'Missing required fields' })
   const maxDays = MEL_INTERVALS[mel_category]
   if (!maxDays) return res.status(400).json({ error: 'Invalid MEL category' })
-  if (Number(extension_days) < 1 || Number(extension_days) > maxDays)
-    return res.status(400).json({ error: `A Cat ${mel_category} item may be extended by 1–${maxDays} days, not more than its original interval` })
   const mel_start = date_mel_start || date_defect_found
   const mel_interval_expiry = addDays(mel_start, MEL_INTERVALS[mel_category])
-  const extension_expiry = addDays(mel_interval_expiry, Number(extension_days))
+  // extension_days and extension_expiry are set by the manager at authorisation
+  const extension_days = null
+  const extension_expiry = null
   const row = db.prepare(`
     INSERT INTO rie_records
       (aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
@@ -472,6 +475,8 @@ app.get('/rie/:id', mustAuth, (req, res) => {
 })
 
 app.patch('/rie/:id', mustAuth, (req, res) => {
+  const me = getProfile(req.user.id)
+  if (!me?.can_sign_applicant) return res.status(403).json({ error: 'You are not authorised to edit RIE records' })
   const existing = db.prepare('SELECT * FROM rie_records WHERE id = ?').get(req.params.id)
   if (!existing) return res.status(404).json({ error: 'Not found' })
   if (existing.status !== 'Draft') return res.status(403).json({ error: 'Can only edit Draft records' })
@@ -479,19 +484,15 @@ app.patch('/rie/:id', mustAuth, (req, res) => {
   const {
     aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title,
     defect_description, reason_not_rectifying, mel_category, date_defect_found, date_mel_start,
-    extension_days, extension_reason, additional_limitations, mcc_reference,
+    extension_reason, additional_limitations, mcc_reference,
     ref_addp, applicant_position, operational_restriction, srp_raised
   } = req.body
 
   const cat = mel_category || existing.mel_category
   const start = date_mel_start || date_defect_found || existing.date_mel_start
-  const extDays = extension_days != null ? Number(extension_days) : existing.extension_days
   const maxDays = MEL_INTERVALS[cat]
   if (!maxDays) return res.status(400).json({ error: 'Invalid MEL category' })
-  if (extDays < 1 || extDays > maxDays)
-    return res.status(400).json({ error: `A Cat ${cat} item may be extended by 1–${maxDays} days, not more than its original interval` })
   const mel_interval_expiry = addDays(start, MEL_INTERVALS[cat])
-  const extension_expiry = addDays(mel_interval_expiry, extDays)
 
   const row = db.prepare(`
     UPDATE rie_records SET
@@ -502,7 +503,7 @@ app.patch('/rie/:id', mustAuth, (req, res) => {
       defect_description = COALESCE(?, defect_description),
       reason_not_rectifying = COALESCE(?, reason_not_rectifying),
       mel_category = ?, date_defect_found = COALESCE(?, date_defect_found),
-      date_mel_start = ?, mel_interval_expiry = ?, extension_days = ?, extension_expiry = ?,
+      date_mel_start = ?, mel_interval_expiry = ?,
       extension_reason = COALESCE(?, extension_reason),
       additional_limitations = COALESCE(?, additional_limitations),
       mcc_reference = COALESCE(?, mcc_reference),
@@ -516,7 +517,7 @@ app.patch('/rie/:id', mustAuth, (req, res) => {
     aircraft_registration || null, aircraft_type || null, mel_item_ref || null,
     mel_chapter_title || null, defect_description || null, reason_not_rectifying || null,
     cat, date_defect_found || null,
-    start, mel_interval_expiry, extDays, extension_expiry,
+    start, mel_interval_expiry,
     extension_reason || null, additional_limitations || null, mcc_reference || null,
     ref_addp || null, applicant_position || null,
     operational_restriction != null ? (operational_restriction ? 1 : 0) : null,
@@ -528,7 +529,7 @@ app.patch('/rie/:id', mustAuth, (req, res) => {
 })
 
 app.post('/rie/:id/sign', mustAuth, async (req, res) => {
-  const { role, signature, use_enrolled, password, name, position, manager_comments } = req.body
+  const { role, signature, use_enrolled, password, name, position, manager_comments, extension_days } = req.body
   if (!['applicant', 'manager'].includes(role)) return res.status(400).json({ error: 'role must be applicant or manager' })
 
   // Permissions come from the database, not the token, so a revoked right takes effect immediately
@@ -570,6 +571,13 @@ app.post('/rie/:id/sign', mustAuth, async (req, res) => {
 
   if (existing.status !== 'Pending Manager') return res.status(403).json({ error: 'Applicant must sign first' })
   if (existing.applicant_id === me.id) return res.status(403).json({ error: 'You signed this RIE as applicant — a different person must authorise it' })
+
+  const extDays = Number(extension_days)
+  if (!extDays || extDays < 1) return res.status(400).json({ error: 'Duration of RIE authorised is required' })
+  const maxDays = MEL_INTERVALS[existing.mel_category]
+  if (extDays > maxDays) return res.status(400).json({ error: `A Cat ${existing.mel_category} item may not exceed ${maxDays} days` })
+  const new_extension_expiry = addDays(existing.mel_interval_expiry, extDays)
+
   const foi_due_at = addDays(now.split('T')[0], 10)
 
   // Transaction so two managers authorising at once can't mint the same reference number
@@ -578,13 +586,15 @@ app.post('/rie/:id/sign', mustAuth, async (req, res) => {
     return db.prepare(`
       UPDATE rie_records SET
         ref_number = ?,
+        extension_days = ?, extension_expiry = ?,
         manager_id = ?, manager_name = ?, manager_position = ?,
         manager_signed_at = ?, manager_signature = ?, manager_sig_source = ?,
         manager_comments = ?,
         status = 'Authorised', foi_due_at = ?,
         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
       WHERE id = ? AND status = 'Pending Manager' RETURNING *
-    `).get(ref_number, me.id, name || me.full_name || me.email, position || null,
+    `).get(ref_number, extDays, new_extension_expiry,
+           me.id, name || me.full_name || me.email, position || null,
            now, sigImage, sigSource, manager_comments || null, foi_due_at, req.params.id)
   })
   const row = authorise()
@@ -607,7 +617,7 @@ app.post('/rie/:id/foi', mustAuth, (req, res) => {
   res.json(row)
 })
 
-app.post('/rie/:id/close', mustAuth, (req, res) => {
+app.post('/rie/:id/close', mustAdmin, (req, res) => {
   const { closure_date, srp_clearance } = req.body
   const row = db.prepare(`
     UPDATE rie_records SET

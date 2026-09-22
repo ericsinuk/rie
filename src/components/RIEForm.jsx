@@ -40,7 +40,6 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
     operational_restriction: false,
     // Part 2
     applicant_position: '',
-    extension_days: '10',
     extension_reason: '',
     mcc_reference: '',
     additional_limitations: '',
@@ -62,7 +61,6 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
           ref_addp: data.ref_addp || '',
           operational_restriction: !!data.operational_restriction,
           applicant_position: data.applicant_position || '',
-          extension_days: String(data.extension_days || '5'),
           extension_reason: data.extension_reason || '',
           mcc_reference: data.mcc_reference || '',
           additional_limitations: data.additional_limitations || '',
@@ -91,15 +89,13 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
     if (!form.reason_not_rectifying.trim()) return setError('Reason for not rectifying is required')
     if (!form.date_defect_found) return setError('Date of defect is required')
     if (!form.extension_reason.trim()) return setError('Justification (Why RIE Required) is required')
-    if (!form.extension_days || parseInt(form.extension_days) < 1) return setError('Extension duration must be at least 1 day')
-    if (parseInt(form.extension_days) > maxExtension)
-      return setError(`A Cat ${form.mel_category} item may be extended by at most ${maxExtension} days — an RIE cannot exceed the original rectification interval`)
+
 
     setSaving(true)
     const payload = {
       ...form,
       date_mel_start: form.date_defect_found,
-      extension_days: parseInt(form.extension_days),
+
       operational_restriction: form.operational_restriction ? 1 : 0,
     }
     const { data, error: err } = editId
@@ -177,7 +173,7 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
               <label>MEL Interval *</label>
               <select
                 value={form.mel_category}
-                onChange={e => setForm(f => ({ ...f, mel_category: e.target.value, extension_days: String(MEL_DAYS[e.target.value]) }))}
+                onChange={e => setForm(f => ({ ...f, mel_category: e.target.value }))}
                 required
               >
                 <option value="B">B — 3 days</option>
@@ -255,19 +251,14 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
               placeholder="Justify why an extension to the MEL interval is required…" required />
           </div>
 
-          <div className="field-row">
-            <div className="field">
-              <label>Requested Duration (days) *</label>
-              <input type="number" min="1" max={maxExtension} value={form.extension_days}
-                onChange={e => set('extension_days', e.target.value)} required />
-              <div className="field-hint">
-                Max {maxExtension} days — a Cat {form.mel_category} extension cannot exceed its original interval
-              </div>
-            </div>
-            <div className="field">
-              <label>MCC Reference</label>
-              <input value={form.mcc_reference} onChange={e => set('mcc_reference', e.target.value)} placeholder="MCC-2026-xxxx" />
-            </div>
+          <div className="field">
+            <label>MCC Reference</label>
+            <input value={form.mcc_reference} onChange={e => set('mcc_reference', e.target.value)} placeholder="MCC-2026-xxxx" />
+          </div>
+
+          <div className="rie-info-box" style={{ marginBottom: 8 }}>
+            Duration of the RIE will be set by the Authorising Manager in Part 3.
+            Max allowed: <strong>{maxExtension} days</strong> (Cat {form.mel_category}).
           </div>
 
           <div className="rie-rules-box">

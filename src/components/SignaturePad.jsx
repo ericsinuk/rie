@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react'
 
 // mode: 'applicant' | 'manager' sign an RIE; 'enrol' saves the user's reusable signature.
 // onSign resolves to an error message (modal stays open) or null (caller closes it).
-export default function SignaturePad({ mode, profile, onSign, onCancel }) {
+export default function SignaturePad({ mode, profile, maxDays, onSign, onCancel }) {
   const enrol = mode === 'enrol'
   const hasSaved = !enrol && !!profile?.signature_image
   const [useSaved, setUseSaved] = useState(hasSaved)
@@ -10,6 +10,7 @@ export default function SignaturePad({ mode, profile, onSign, onCancel }) {
   const [name, setName] = useState(profile?.full_name || '')
   const [position, setPosition] = useState(profile?.department || '')
   const [comments, setComments] = useState('')
+  const [extDays, setExtDays] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -68,13 +69,16 @@ export default function SignaturePad({ mode, profile, onSign, onCancel }) {
     const signature = drawMode ? canvasRef.current.toDataURL('image/png') : undefined
     const err = await onSign({
       signature, use_enrolled: !drawMode, password,
-      name, position, manager_comments: mode === 'manager' ? comments : undefined,
+      name, position,
+      manager_comments: mode === 'manager' ? comments : undefined,
+      extension_days: mode === 'manager' ? Number(extDays) : undefined,
     })
     setBusy(false)
     if (err) setError(err)
   }
 
-  const canSubmit = !busy && password && (enrol || name.trim()) && (!drawMode || !isEmpty)
+  const canSubmit = !busy && password && (enrol || name.trim()) && (!drawMode || !isEmpty) &&
+    (mode !== 'manager' || (Number(extDays) >= 1 && Number(extDays) <= (maxDays || 999)))
   const title = enrol ? 'My Signature' : mode === 'applicant' ? 'Sign as Applicant' : 'Authorise as Manager'
 
   return (
@@ -102,11 +106,21 @@ export default function SignaturePad({ mode, profile, onSign, onCancel }) {
         )}
 
         {mode === 'manager' && (
-          <div className="field">
-            <label>Manager Comments <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>(optional — include previous RIE history for this item)</span></label>
-            <textarea value={comments} onChange={e => setComments(e.target.value)} rows={3}
-              placeholder="Any comments, previous RIE history for this defect item…" />
-          </div>
+          <>
+            <div className="field-row">
+              <div className="field">
+                <label>Duration of RIE Authorised (days) *</label>
+                <input type="number" min="1" max={maxDays || 120} value={extDays}
+                  onChange={e => setExtDays(e.target.value)} placeholder={`1–${maxDays || 120}`} required />
+                {maxDays && <div className="field-hint">Max {maxDays} days for this MEL category</div>}
+              </div>
+            </div>
+            <div className="field">
+              <label>Manager Comments <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>(optional — include previous RIE history for this item)</span></label>
+              <textarea value={comments} onChange={e => setComments(e.target.value)} rows={3}
+                placeholder="Any comments, previous RIE history for this defect item…" />
+            </div>
+          </>
         )}
 
         {drawMode ? (
