@@ -78,6 +78,9 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
     ? addDays(form.date_defect_found, MEL_DAYS[form.mel_category])
     : null
 
+  // An RIE may extend an item by at most its original rectification interval
+  const maxExtension = MEL_DAYS[form.mel_category]
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
@@ -87,6 +90,8 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
     if (!form.date_defect_found) return setError('Date of defect is required')
     if (!form.extension_reason.trim()) return setError('Justification (Why RIE Required) is required')
     if (!form.extension_days || parseInt(form.extension_days) < 1) return setError('Extension duration must be at least 1 day')
+    if (parseInt(form.extension_days) > maxExtension)
+      return setError(`A Cat ${form.mel_category} item may be extended by at most ${maxExtension} days — an RIE cannot exceed the original rectification interval`)
 
     setSaving(true)
     const payload = {
@@ -247,8 +252,11 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
           <div className="field-row">
             <div className="field">
               <label>Requested Duration (days) *</label>
-              <input type="number" min="1" max="365" value={form.extension_days}
+              <input type="number" min="1" max={maxExtension} value={form.extension_days}
                 onChange={e => set('extension_days', e.target.value)} required />
+              <div className="field-hint">
+                Max {maxExtension} days — a Cat {form.mel_category} extension cannot exceed its original interval
+              </div>
             </div>
             <div className="field">
               <label>MCC Reference</label>

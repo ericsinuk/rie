@@ -409,6 +409,10 @@ app.post('/rie', mustAuth, (req, res) => {
   if (!aircraft_registration || !aircraft_type || !mel_item_ref || !defect_description ||
       !mel_category || !date_defect_found || !extension_days || !extension_reason)
     return res.status(400).json({ error: 'Missing required fields' })
+  const maxDays = MEL_INTERVALS[mel_category]
+  if (!maxDays) return res.status(400).json({ error: 'Invalid MEL category' })
+  if (Number(extension_days) < 1 || Number(extension_days) > maxDays)
+    return res.status(400).json({ error: `A Cat ${mel_category} item may be extended by 1–${maxDays} days, not more than its original interval` })
   const mel_start = date_mel_start || date_defect_found
   const mel_interval_expiry = addDays(mel_start, MEL_INTERVALS[mel_category])
   const extension_expiry = addDays(mel_interval_expiry, Number(extension_days))
@@ -422,7 +426,7 @@ app.post('/rie', mustAuth, (req, res) => {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *
   `).get(aircraft_registration, aircraft_type, mel_item_ref, mel_chapter_title || null,
          defect_description, reason_not_rectifying || null, mel_category,
-         date_defect_found, date_mel_start,
+         date_defect_found, mel_start,
          mel_interval_expiry, Number(extension_days), extension_expiry,
          extension_reason, additional_limitations || null, mcc_reference || null,
          ref_addp || null, applicant_position || null,
@@ -452,6 +456,10 @@ app.patch('/rie/:id', mustAuth, (req, res) => {
   const cat = mel_category || existing.mel_category
   const start = date_mel_start || date_defect_found || existing.date_mel_start
   const extDays = extension_days != null ? Number(extension_days) : existing.extension_days
+  const maxDays = MEL_INTERVALS[cat]
+  if (!maxDays) return res.status(400).json({ error: 'Invalid MEL category' })
+  if (extDays < 1 || extDays > maxDays)
+    return res.status(400).json({ error: `A Cat ${cat} item may be extended by 1–${maxDays} days, not more than its original interval` })
   const mel_interval_expiry = addDays(start, MEL_INTERVALS[cat])
   const extension_expiry = addDays(mel_interval_expiry, extDays)
 
