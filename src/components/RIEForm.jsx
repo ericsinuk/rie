@@ -86,7 +86,9 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
     setError('')
     if (!form.aircraft_registration.trim()) return setError('Aircraft registration is required')
     if (!form.mel_item_ref.trim()) return setError('MEL item reference is required')
+    if (!form.mel_chapter_title.trim()) return setError('MEL System Title is required')
     if (!form.defect_description.trim()) return setError('Detail of defect is required')
+    if (!form.reason_not_rectifying.trim()) return setError('Reason for not rectifying is required')
     if (!form.date_defect_found) return setError('Date of defect is required')
     if (!form.extension_reason.trim()) return setError('Justification (Why RIE Required) is required')
     if (!form.extension_days || parseInt(form.extension_days) < 1) return setError('Extension duration must be at least 1 day')
@@ -203,8 +205,8 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
 
           {/* Full-width text fields */}
           <div className="field">
-            <label>MEL System Title</label>
-            <input value={form.mel_chapter_title} onChange={e => set('mel_chapter_title', e.target.value)} placeholder="AC Electrical Power" />
+            <label>MEL System Title *</label>
+            <input value={form.mel_chapter_title} onChange={e => set('mel_chapter_title', e.target.value)} placeholder="AC Electrical Power" required />
           </div>
 
           <div className="field">
@@ -214,16 +216,16 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
           </div>
 
           <div className="field">
-            <label>Reason for not rectifying</label>
+            <label>Reason for not rectifying *</label>
             <textarea value={form.reason_not_rectifying} onChange={e => set('reason_not_rectifying', e.target.value)} rows={2}
-              placeholder="Why cannot the defect be rectified now (e.g. part not available, AOG situation)…" />
+              placeholder="Why cannot the defect be rectified now (e.g. part not available, AOG situation)…" required />
           </div>
 
           {/* Operational restriction at bottom of Part 1 */}
           <div className="field">
             <label className="check-label">
               <input type="checkbox" checked={form.operational_restriction} onChange={e => set('operational_restriction', e.target.checked)} />
-              Operational Restriction applies
+              Operational Restriction or Limitation applies
             </label>
             {form.operational_restriction && (
               <textarea value={form.additional_limitations} onChange={e => set('additional_limitations', e.target.value)} rows={2}
