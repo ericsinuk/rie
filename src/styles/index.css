@@ -87,6 +87,13 @@ input, select, textarea {
 }
 input:focus, select:focus, textarea:focus { border-color: var(--primary); }
 input[readonly], input:disabled { color: var(--text-2); cursor: default; }
+
+/* Make the native date/time picker icon visible on dark backgrounds */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(0.7);
+  cursor: pointer;
+}
 textarea { resize: vertical; min-height: 80px; }
 select {
   appearance: none;
