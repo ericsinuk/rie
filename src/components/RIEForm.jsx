@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { rie } from '../lib/api.js'
+import DateField from './DateField.jsx'
 
 const MEL_DAYS = { B: 3, C: 10, D: 120 }
 
@@ -137,7 +138,7 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
           <div className="field-row-3">
             <div className="field">
               <label>Date of Defect *</label>
-              <input type="date" value={form.date_defect_found} onChange={e => set('date_defect_found', e.target.value)} required />
+              <DateField value={form.date_defect_found} onChange={v => set('date_defect_found', v)} required />
             </div>
             <div className="field">
               <label>Aircraft Registration *</label>

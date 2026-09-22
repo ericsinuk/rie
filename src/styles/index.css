@@ -532,3 +532,47 @@ select {
   margin-bottom: 12px;
 }
 .fleet-inactive td { opacity: .5; }
+
+/* ── Date picker (react-datepicker) ── */
+.datepicker-wrapper { width: 100%; }
+.datepicker-input {
+  width: 100%; background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 8px 10px; font-size: 14px; outline: none; font-family: inherit;
+  cursor: pointer;
+}
+.datepicker-input:focus { border-color: var(--primary); }
+
+.react-datepicker {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: inherit; font-size: 13px; color: var(--text); box-shadow: 0 8px 24px rgba(0,0,0,.5);
+}
+.react-datepicker__header {
+  background: var(--surface); border-bottom: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0;
+  padding: 10px 8px 6px;
+}
+.react-datepicker__current-month,
+.react-datepicker__day-name { color: var(--text-2); font-weight: 600; }
+.react-datepicker__day { color: var(--text); border-radius: 4px; }
+.react-datepicker__day:hover { background: var(--surface); color: var(--primary); }
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected {
+  background: var(--primary); color: #000; font-weight: 700;
+}
+.react-datepicker__day--today { font-weight: 700; color: var(--primary); }
+.react-datepicker__day--outside-month { color: var(--text-3); }
+.react-datepicker__day--disabled { color: var(--text-3); opacity: .4; }
+.react-datepicker__navigation-icon::before { border-color: var(--text-2); }
+.react-datepicker__navigation:hover .react-datepicker__navigation-icon::before { border-color: var(--primary); }
+.react-datepicker__today-button {
+  background: var(--surface); border-top: 1px solid var(--border);
+  color: var(--primary); font-weight: 600; padding: 6px; cursor: pointer;
+}
+.react-datepicker__today-button:hover { background: var(--bg); }
+.react-datepicker__month-select,
+.react-datepicker__year-select {
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 4px; font-size: 12px;
+}
+.react-datepicker-popper { z-index: 200; }
+.react-datepicker__triangle { display: none; }
