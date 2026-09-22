@@ -82,7 +82,7 @@ export default function RIECharts({ records }) {
     const result = []
     for (let i = 11; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const label = d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })
+      const label = d.toLocaleDateString('en-GB', { month: 'short' })
       const count = chartRecords.filter(r => {
         if (!r.date_defect_found) return false
         const rd = new Date(r.date_defect_found)
@@ -125,11 +125,6 @@ export default function RIECharts({ records }) {
           <div className="kpi-label">Overdue</div>
           <div className="kpi-value">{overdue}</div>
           <div className="kpi-sub">Ext. expiry passed</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Avg Extension</div>
-          <div className="kpi-value">{avgDays}<span className="kpi-unit">d</span></div>
-          <div className="kpi-sub">All authorised RIEs</div>
         </div>
       </div>
 
