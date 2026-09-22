@@ -88,7 +88,13 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus { border-color: var(--primary); }
 input[readonly], input:disabled { color: var(--text-2); cursor: default; }
 textarea { resize: vertical; min-height: 80px; }
-select { appearance: none; }
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23aaa' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
 
 .field { margin-bottom: 14px; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

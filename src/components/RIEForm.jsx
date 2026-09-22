@@ -133,7 +133,8 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
         <div className="rie-part-card">
           <div className="rie-part-header">Part 1 — MEL Defect</div>
 
-          <div className="field-row">
+          {/* Row 1: Date of Defect | Aircraft Reg | Aircraft Type */}
+          <div className="field-row-3">
             <div className="field">
               <label>Date of Defect *</label>
               <input type="date" value={form.date_defect_found} onChange={e => set('date_defect_found', e.target.value)} required />
@@ -164,47 +165,31 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
             </div>
           </div>
 
-          <div className="field">
-            <label>Detail of Defect *</label>
-            <textarea value={form.defect_description} onChange={e => set('defect_description', e.target.value)} rows={3}
-              placeholder="Describe the defect in detail…" required />
-          </div>
-
-          <div className="field">
-            <label>Reason for not rectifying *</label>
-            <textarea value={form.reason_not_rectifying} onChange={e => set('reason_not_rectifying', e.target.value)} rows={2}
-              placeholder="Why cannot the defect be rectified now (e.g. part not available, AOG situation)…" />
-          </div>
-
-          <div className="field-row" style={{ alignItems: 'flex-end' }}>
+          {/* Row 2: MEL Expiry | MEL Interval | MEL Ref No */}
+          <div className="field-row-3">
+            <div className="field">
+              <label>MEL Expiry Date</label>
+              <div className="computed-field">{melExpiry ? fmtDate(melExpiry) : '—'}</div>
+            </div>
+            <div className="field">
+              <label>MEL Interval *</label>
+              <select
+                value={form.mel_category}
+                onChange={e => setForm(f => ({ ...f, mel_category: e.target.value, extension_days: String(MEL_DAYS[e.target.value]) }))}
+                required
+              >
+                <option value="B">B — 3 days</option>
+                <option value="C">C — 10 days</option>
+                <option value="D">D — 120 days</option>
+              </select>
+            </div>
             <div className="field">
               <label>MEL Reference No *</label>
               <input value={form.mel_item_ref} onChange={e => set('mel_item_ref', e.target.value)} placeholder="24-20-01A" required />
             </div>
-            <div className="field">
-              <label>MEL System Title</label>
-              <input value={form.mel_chapter_title} onChange={e => set('mel_chapter_title', e.target.value)} placeholder="AC Electrical Power" />
-            </div>
           </div>
 
-          <div className="field">
-            <label>MEL Interval *</label>
-            <div className="cat-select">
-              {['B', 'C', 'D'].map(c => (
-                <button key={c} type="button"
-                  className={`cat-btn ${form.mel_category === c ? `sel-${c}` : ''}`}
-                  onClick={() => setForm(f => ({ ...f, mel_category: c, extension_days: String(MEL_DAYS[c]) }))}>
-                  {c}<span className="cat-label">{MEL_DAYS[c]} days</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="field">
-            <label>MEL Expiry Date</label>
-            <div className="computed-field">{melExpiry ? fmtDate(melExpiry) : 'Set date of defect and interval above'}</div>
-          </div>
-
+          {/* Row 3: SRP No | MDDR "P" No */}
           <div className="field-row">
             <div className="field">
               <label>SRP No</label>
@@ -216,6 +201,25 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
             </div>
           </div>
 
+          {/* Full-width text fields */}
+          <div className="field">
+            <label>MEL System Title</label>
+            <input value={form.mel_chapter_title} onChange={e => set('mel_chapter_title', e.target.value)} placeholder="AC Electrical Power" />
+          </div>
+
+          <div className="field">
+            <label>Detail of Defect *</label>
+            <textarea value={form.defect_description} onChange={e => set('defect_description', e.target.value)} rows={3}
+              placeholder="Describe the defect in detail…" required />
+          </div>
+
+          <div className="field">
+            <label>Reason for not rectifying</label>
+            <textarea value={form.reason_not_rectifying} onChange={e => set('reason_not_rectifying', e.target.value)} rows={2}
+              placeholder="Why cannot the defect be rectified now (e.g. part not available, AOG situation)…" />
+          </div>
+
+          {/* Operational restriction at bottom of Part 1 */}
           <div className="field">
             <label className="check-label">
               <input type="checkbox" checked={form.operational_restriction} onChange={e => set('operational_restriction', e.target.checked)} />
