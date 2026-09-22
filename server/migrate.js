@@ -309,6 +309,8 @@ for (const [col, def] of [
   ['can_sign_manager',     'INTEGER NOT NULL DEFAULT 0'],
   ['signature_image',      'TEXT'],
   ['signature_updated_at', 'TEXT'],
+  ['position',             'TEXT'],
+  ['active',               'INTEGER NOT NULL DEFAULT 1'],
 ]) {
   if (!profileColumns.includes(col)) {
     db.prepare(`ALTER TABLE profiles ADD COLUMN ${col} ${def}`).run()

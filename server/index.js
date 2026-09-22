@@ -62,6 +62,7 @@ function publicProfile(row, viewerId) {
   if (!row) return null
   return {
     id: row.id, email: row.email, full_name: row.full_name, department: row.department,
+    position: row.position, active: row.active !== 0,
     created_at: row.created_at,
     is_admin: !!row.is_admin,
     can_sign_applicant: !!row.can_sign_applicant,
@@ -106,18 +107,42 @@ app.get('/admin/users', mustAdmin, (req, res) => {
   res.json(rows.map(r => publicProfile(r, req.user.id)))
 })
 
-app.patch('/admin/users/:id', mustAdmin, (req, res) => {
+app.post('/admin/users', mustAdmin, async (req, res) => {
+  const { email, password, full_name, position, department } = req.body
+  if (!email?.trim() || !password) return res.status(400).json({ error: 'Email and password are required' })
+  if (db.prepare('SELECT id FROM profiles WHERE email = ?').get(email.trim().toLowerCase()))
+    return res.status(409).json({ error: 'Email already exists' })
+  const hash = await bcrypt.hash(password, 10)
+  const row = db.prepare(
+    'INSERT INTO profiles (email, password_hash, full_name, position, department) VALUES (?,?,?,?,?) RETURNING *'
+  ).get(email.trim().toLowerCase(), hash, full_name?.trim() || null, position?.trim() || null, department?.trim() || null)
+  res.json(publicProfile(row, req.user.id))
+})
+
+app.patch('/admin/users/:id', mustAdmin, async (req, res) => {
   const target = getProfile(req.params.id)
   if (!target || target.email === 'import@dhl.com') return res.status(404).json({ error: 'Not found' })
+
+  const { full_name, position, department, password, active } = req.body
   const flags = ['is_admin', 'can_sign_applicant', 'can_sign_manager'].filter(f => f in req.body)
-  if (!flags.length) return res.status(400).json({ error: 'Nothing to update' })
+
   if (req.body.is_admin === false && target.is_admin) {
     const admins = db.prepare('SELECT COUNT(*) AS n FROM profiles WHERE is_admin = 1').get().n
     if (admins <= 1) return res.status(400).json({ error: 'Cannot remove the last admin' })
   }
-  const sets = flags.map(f => `${f} = ?`).join(', ')
-  const row = db.prepare(`UPDATE profiles SET ${sets} WHERE id = ? RETURNING *`)
-    .get(...flags.map(f => (req.body[f] ? 1 : 0)), target.id)
+
+  const sets = []
+  const vals = []
+  for (const f of flags) { sets.push(`${f} = ?`); vals.push(req.body[f] ? 1 : 0) }
+  if (full_name !== undefined) { sets.push('full_name = ?'); vals.push(full_name?.trim() || null) }
+  if (position  !== undefined) { sets.push('position = ?');  vals.push(position?.trim()  || null) }
+  if (department !== undefined) { sets.push('department = ?'); vals.push(department?.trim() || null) }
+  if (active !== undefined) { sets.push('active = ?'); vals.push(active ? 1 : 0) }
+  if (password) { sets.push('password_hash = ?'); vals.push(await bcrypt.hash(password, 10)) }
+
+  if (!sets.length) return res.status(400).json({ error: 'Nothing to update' })
+  vals.push(target.id)
+  const row = db.prepare(`UPDATE profiles SET ${sets.join(', ')} WHERE id = ? RETURNING *`).get(...vals)
   res.json(publicProfile(row, req.user.id))
 })
 

@@ -381,5 +381,7 @@ export const fleet = {
 
 export const admin = {
   users: () => apiFetch('/admin/users'),
+  addUser: (data) => apiFetch('/admin/users', { method: 'POST', body: data }),
+  updateUser: (id, data) => apiFetch(`/admin/users/${id}`, { method: 'PATCH', body: data }),
   setRights: (id, rights) => apiFetch(`/admin/users/${id}`, { method: 'PATCH', body: rights }),
 }
