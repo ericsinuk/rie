@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { rie } from '../lib/api.js'
 import { supabase } from '../lib/supabase.js'
+import RIECharts from './RIECharts.jsx'
 
 const MEL_DAYS = { B: 3, C: 10, D: 120 }
 
@@ -83,6 +84,8 @@ export default function Dashboard({ onNew, onOpen }) {
         <h1>RIE Records</h1>
         <button className="btn btn-primary" onClick={onNew}>+ New RIE</button>
       </div>
+
+      {!loading && <RIECharts records={records} />}
 
       <div className="filter-bar">
         {STATUS_FILTERS.map(f => (

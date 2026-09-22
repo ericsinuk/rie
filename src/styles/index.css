@@ -539,3 +539,47 @@ select {
   margin-bottom: 12px;
 }
 .fleet-inactive td { opacity: .5; }
+
+/* ── KPI / Charts section ── */
+.rie-kpi-section { flex-shrink: 0; margin-bottom: 16px; }
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.kpi-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px;
+}
+.kpi-card.kpi-danger { border-color: var(--danger); background: #1a0a0a; }
+.kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-3); margin-bottom: 4px; }
+.kpi-value { font-size: 28px; font-weight: 800; color: var(--text); line-height: 1; }
+.kpi-card.kpi-danger .kpi-value { color: var(--danger); }
+.kpi-unit { font-size: 14px; font-weight: 600; color: var(--text-2); margin-left: 2px; }
+.kpi-sub { font-size: 10px; color: var(--text-3); margin-top: 3px; }
+
+.kpi-chart-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.kpi-chart-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-3); }
+.kpi-fleet-filter { display: flex; gap: 4px; }
+
+.kpi-charts-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.kpi-chart-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px;
+}
+.kpi-chart-label { font-size: 11px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
+
+@media (max-width: 900px) {
+  .kpi-row { grid-template-columns: repeat(3, 1fr); }
+  .kpi-charts-row { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
