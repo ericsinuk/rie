@@ -363,6 +363,22 @@ export const rie = {
   // body: { role, signature | use_enrolled, password, name, position, manager_comments }
   sign: (id, body) => apiFetch(`/rie/${id}/sign`, { method: 'POST', body }),
   markFoi: (id) => apiFetch(`/rie/${id}/foi`, { method: 'POST' }),
+  uploadTechlog: (id, file) => {
+    const token = localStorage.getItem('ra_token')
+    return fetch(`${BASE}/rie/${id}/techlog`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': file.type || 'application/octet-stream',
+        'X-Filename': encodeURIComponent(file.name),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: file,
+    }).then(async r => {
+      const data = await r.json().catch(() => ({}))
+      return r.ok ? { data, error: null } : { data: null, error: data }
+    })
+  },
+  techdocUrl: (id) => `${BASE}/rie/${id}/techlog`,
   close: (id, body = {}) => apiFetch(`/rie/${id}/close`, { method: 'POST', body }),
 }
 

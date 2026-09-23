@@ -3,8 +3,13 @@ import express from 'express'
 import cors from 'cors'
 import { WebSocketServer } from 'ws'
 import { createServer } from 'http'
+import { createReadStream, mkdirSync, writeFileSync, existsSync } from 'fs'
+import { join, extname } from 'path'
 import { authMiddleware, findUserByEmail, findUserById, hashPassword, verifyPassword, toSession, verifyTokenForSocket } from './auth.js'
 import { db } from './db.js'
+
+const UPLOADS_DIR = join(new URL('.', import.meta.url).pathname, 'uploads')
+mkdirSync(UPLOADS_DIR, { recursive: true })
 
 // Run migrations on startup
 import('./migrate.js').catch(e => { console.error('Migration failed', e); process.exit(1) })
@@ -603,10 +608,55 @@ app.post('/rie/:id/sign', mustAuth, async (req, res) => {
   res.json(row)
 })
 
+// ── Tech log attachment ───────────────────────────────────────────────────────
+app.post('/rie/:id/techlog', mustAuth, (req, res) => {
+  const me = getProfile(req.user.id)
+  if (!me?.can_sign_applicant) return res.status(403).json({ error: 'Applicant rights required to attach tech log' })
+  const existing = db.prepare('SELECT * FROM rie_records WHERE id = ?').get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'Not found' })
+  if (existing.status !== 'Authorised') return res.status(403).json({ error: 'Tech log can only be attached when record is Authorised' })
+
+  const originalName = decodeURIComponent(req.headers['x-filename'] || 'techlog.pdf')
+  const ext = extname(originalName).toLowerCase() || '.pdf'
+  if (!['.pdf', '.jpg', '.jpeg', '.png'].includes(ext))
+    return res.status(400).json({ error: 'Only PDF, JPG, or PNG files are accepted' })
+
+  const chunks = []
+  req.on('data', c => chunks.push(c))
+  req.on('end', () => {
+    const buf = Buffer.concat(chunks)
+    if (buf.length > 10 * 1024 * 1024) return res.status(413).json({ error: 'File too large (max 10 MB)' })
+    const filename = `techlog-${req.params.id}${ext}`
+    writeFileSync(join(UPLOADS_DIR, filename), buf)
+    const now = new Date().toISOString()
+    const row = db.prepare(`
+      UPDATE rie_records SET
+        techlog_filename = ?, techlog_original_name = ?,
+        techlog_attached_at = ?, techlog_attached_by = ?,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+      WHERE id = ? RETURNING *
+    `).get(filename, originalName, now, me.full_name || me.email, req.params.id)
+    broadcast({ event: 'UPDATE', table: 'rie_records', new: row })
+    res.json(row)
+  })
+  req.on('error', () => res.status(500).json({ error: 'Upload failed' }))
+})
+
+app.get('/rie/:id/techlog', mustAuth, (req, res) => {
+  const existing = db.prepare('SELECT techlog_filename, techlog_original_name FROM rie_records WHERE id = ?').get(req.params.id)
+  if (!existing?.techlog_filename) return res.status(404).json({ error: 'No tech log attached' })
+  const filePath = join(UPLOADS_DIR, existing.techlog_filename)
+  if (!existsSync(filePath)) return res.status(404).json({ error: 'File not found' })
+  res.setHeader('Content-Disposition', `inline; filename="${existing.techlog_original_name || existing.techlog_filename}"`)
+  res.setHeader('Content-Type', existing.techlog_filename.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
+  createReadStream(filePath).pipe(res)
+})
+
 app.post('/rie/:id/foi', mustAuth, (req, res) => {
   const existing = db.prepare('SELECT * FROM rie_records WHERE id = ?').get(req.params.id)
   if (!existing) return res.status(404).json({ error: 'Not found' })
   if (existing.status !== 'Authorised') return res.status(403).json({ error: 'Must be Authorised first' })
+  if (!existing.techlog_filename) return res.status(403).json({ error: 'Tech log attachment is required before submitting to FOI' })
   const row = db.prepare(`
     UPDATE rie_records SET
       foi_submitted_at = ?, status = 'Submitted to FOI',

@@ -456,6 +456,18 @@ select {
 .check-label input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--primary); cursor: pointer; }
 
 /* RIE rules reminder box */
+.techlog-section {
+  margin-top: 16px; padding: 14px 16px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.techlog-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.techlog-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-3); }
+.techlog-attached { display: flex; flex-direction: column; gap: 4px; }
+.techlog-filename { font-size: 13px; font-weight: 600; color: var(--text); word-break: break-all; }
+.techlog-meta { font-size: 11px; color: var(--text-3); }
+.techlog-upload { }
+
 .rie-info-box {
   background: var(--bg-2); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 8px 12px;

@@ -39,6 +39,8 @@ export default function RIEDetail({ id, profile, onBack, onEdit, autoSign = fals
   const [error, setError] = useState('')
   const [closeForm, setCloseForm] = useState({ closure_date: '', srp_clearance: '' })
   const [showCloseForm, setShowCloseForm] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
 
   useEffect(() => {
     loadRec()
@@ -80,6 +82,17 @@ export default function RIEDetail({ id, profile, onBack, onEdit, autoSign = fals
     setShowCloseForm(false)
   }
 
+  async function handleTechlogUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadError(''); setUploading(true)
+    const { data, error: err } = await rie.uploadTechlog(id, file)
+    setUploading(false)
+    if (err) { setUploadError(err.error || 'Upload failed'); return }
+    setRec(data)
+    e.target.value = ''
+  }
+
   if (loading || !rec) return <div className="loading">Loading…</div>
 
   const isClosed = rec.status === 'Closed'
@@ -105,7 +118,10 @@ export default function RIEDetail({ id, profile, onBack, onEdit, autoSign = fals
             </button>
           )}
           {rec.status === 'Authorised' && (
-            <button className="btn btn-success" onClick={handleMarkFoi}>
+            <button className="btn btn-success"
+              onClick={handleMarkFoi}
+              disabled={!rec.techlog_filename}
+              title={!rec.techlog_filename ? 'Attach tech log page first' : undefined}>
               Mark Submitted to FOI
             </button>
           )}
@@ -320,6 +336,51 @@ export default function RIEDetail({ id, profile, onBack, onEdit, autoSign = fals
               <div className="sig-date">{fmtDt(rec.manager_signed_at)}</div>
               <SigSource source={rec.manager_sig_source} />
             </div>
+
+            {/* Tech log attachment */}
+            {['Authorised', 'Submitted to FOI', 'Closed'].includes(rec.status) && (
+              <div className="techlog-section">
+                <div className="techlog-header">
+                  <span className="techlog-label">Tech Log Attachment</span>
+                  {rec.techlog_filename
+                    ? <span className="badge badge-auth" style={{ fontSize: 10 }}>✓ Attached</span>
+                    : rec.status === 'Authorised'
+                      ? <span className="badge badge-pending" style={{ fontSize: 10 }}>Required</span>
+                      : null}
+                </div>
+                {rec.techlog_filename ? (
+                  <div className="techlog-attached">
+                    <span className="techlog-filename">{rec.techlog_original_name || rec.techlog_filename}</span>
+                    <span className="techlog-meta">Attached by {rec.techlog_attached_by} · {fmtDt(rec.techlog_attached_at)}</span>
+                    <a className="btn btn-ghost btn-sm" href={rie.techdocUrl(id)}
+                      target="_blank" rel="noreferrer" style={{ marginTop: 4 }}>
+                      View / Download
+                    </a>
+                    {rec.status === 'Authorised' && profile?.can_sign_applicant && (
+                      <label className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', marginTop: 4 }}>
+                        Replace
+                        <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }}
+                          onChange={handleTechlogUpload} disabled={uploading} />
+                      </label>
+                    )}
+                  </div>
+                ) : rec.status === 'Authorised' && profile?.can_sign_applicant ? (
+                  <div className="techlog-upload">
+                    <p className="page-note" style={{ margin: '0 0 8px' }}>
+                      Attach the relevant tech log page as proof the MEL entry has been recorded before submitting to FOI.
+                    </p>
+                    {uploadError && <div className="auth-error" style={{ marginBottom: 8 }}>{uploadError}</div>}
+                    <label className={`btn btn-primary btn-sm ${uploading ? 'disabled' : ''}`} style={{ cursor: 'pointer' }}>
+                      {uploading ? 'Uploading…' : 'Attach Tech Log Page'}
+                      <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }}
+                        onChange={handleTechlogUpload} disabled={uploading} />
+                    </label>
+                  </div>
+                ) : rec.status === 'Authorised' ? (
+                  <p className="page-note" style={{ margin: 0 }}>No tech log attached yet — an applicant must attach it before FOI submission.</p>
+                ) : null}
+              </div>
+            )}
 
             {/* FOI notice */}
             {['Authorised', 'Submitted to FOI', 'Closed'].includes(rec.status) && (

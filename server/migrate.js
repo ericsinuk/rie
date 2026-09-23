@@ -408,6 +408,11 @@ for (const [col, def] of [
   ['srp_raised',             'TEXT'],
   ['srp_clearance',          'TEXT'],
   ['closure_date',           'TEXT'],
+  // Tech log attachment (added 2026-09-23)
+  ['techlog_filename',       'TEXT'],
+  ['techlog_original_name',  'TEXT'],
+  ['techlog_attached_at',    'TEXT'],
+  ['techlog_attached_by',    'TEXT'],
 ]) {
   if (!rieColumns2.includes(col)) {
     db.prepare(`ALTER TABLE rie_records ADD COLUMN ${col} ${def}`).run()
