@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { rie } from '../lib/api.js'
 
 const MEL_DAYS = { B: 3, C: 10, D: 120 }
@@ -24,6 +24,7 @@ const RIE_RULES = [
 export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = [] }) {
   const [loading, setLoading] = useState(!!editId)
   const [saving, setSaving] = useState(false)
+  const signAfterSave = useRef(false)
   const [error, setError] = useState('')
 
   const [form, setForm] = useState({
@@ -104,7 +105,8 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
 
     setSaving(false)
     if (err) return setError(err.error || err.message || 'Save failed')
-    onSaved(data.id)
+    onSaved(data.id, signAfterSave.current)
+    signAfterSave.current = false
   }
 
   if (loading) return <div className="loading">Loading…</div>
@@ -116,8 +118,15 @@ export default function RIEForm({ profile, editId, onBack, onSaved, fleetList = 
         <h1>{editId ? 'Edit RIE' : 'New Rectification Interval Extension'}</h1>
         <div className="spacer" />
         <div className="bar-actions">
-          <button type="submit" form="rie-form" className="btn btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : editId ? 'Save Changes' : 'Save as Draft'}
+          {!editId && (
+            <button type="submit" form="rie-form" className="btn btn-ghost" disabled={saving}
+              onClick={() => { signAfterSave.current = false }}>
+              Save as Draft
+            </button>
+          )}
+          <button type="submit" form="rie-form" className="btn btn-primary" disabled={saving}
+            onClick={() => { signAfterSave.current = !editId }}>
+            {saving ? 'Saving…' : editId ? 'Save Changes' : 'Sign as Applicant'}
           </button>
         </div>
       </div>

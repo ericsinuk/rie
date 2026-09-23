@@ -97,7 +97,7 @@ export default function App() {
           profile={profile}
           fleetList={fleetList}
           onBack={() => setView({ page: 'dashboard' })}
-          onSaved={(id) => setView({ page: 'detail', id, autoSign: true })}
+          onSaved={(id, autoSign) => setView({ page: 'detail', id, autoSign: !!autoSign })}
         />
       )}
       {view.page === 'edit' && (
