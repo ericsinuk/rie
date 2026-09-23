@@ -253,19 +253,6 @@ export default function RIEDetail({ id, profile, onBack, onEdit, autoSign = fals
         <div className="detail-grid">
           <div className="detail-field"><div className="lbl">Name of Applicant</div><div className="val">{rec.applicant_name || '—'}</div></div>
           <div className="detail-field"><div className="lbl">Position</div><div className="val">{rec.applicant_position || '—'}</div></div>
-          <div className="detail-field">
-            <div className="lbl">Requested Duration</div>
-            <div className="val">{rec.extension_days} day{rec.extension_days !== 1 ? 's' : ''}</div>
-          </div>
-          <div className="detail-field">
-            <div className="lbl">Extension Expiry</div>
-            <div className={`val ${extDays !== null && extDays < 0 ? 'over' : extDays !== null && extDays <= 3 ? 'warn' : ''}`}>
-              {fmtDate(rec.extension_expiry)}
-              {extDays !== null && <span style={{ marginLeft: 6, fontSize: 11, color: 'inherit' }}>
-                ({extDays < 0 ? `${Math.abs(extDays)}d overdue` : `${extDays}d remaining`})
-              </span>}
-            </div>
-          </div>
           {rec.mcc_reference && <div className="detail-field"><div className="lbl">MCC Reference</div><div className="val mono">{rec.mcc_reference}</div></div>}
         </div>
 
@@ -318,6 +305,14 @@ export default function RIEDetail({ id, profile, onBack, onEdit, autoSign = fals
                 {rec.manager_position && <div className="detail-field"><div className="lbl">Position</div><div className="val">{rec.manager_position}</div></div>}
                 <div className="detail-field"><div className="lbl">Date Authorised</div><div className="val">{fmtDt(rec.manager_signed_at)}</div></div>
                 <div className="detail-field"><div className="lbl">Duration Authorised</div><div className="val">{rec.extension_days} days</div></div>
+                <div className="detail-field"><div className="lbl">Extension Expiry</div>
+                  <div className={`val ${extDays !== null && extDays < 0 ? 'over' : extDays !== null && extDays <= 3 ? 'warn' : ''}`}>
+                    {fmtDate(rec.extension_expiry)}
+                    {extDays !== null && <span style={{ marginLeft: 6, fontSize: 11, color: 'inherit' }}>
+                      ({extDays < 0 ? `${Math.abs(extDays)}d overdue` : `${extDays}d remaining`})
+                    </span>}
+                  </div>
+                </div>
               </div>
             </div>
 
