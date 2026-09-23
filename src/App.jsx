@@ -97,7 +97,7 @@ export default function App() {
           profile={profile}
           fleetList={fleetList}
           onBack={() => setView({ page: 'dashboard' })}
-          onSaved={(id) => setView({ page: 'detail', id })}
+          onSaved={(id) => setView({ page: 'detail', id, autoSign: true })}
         />
       )}
       {view.page === 'edit' && (
@@ -123,6 +123,7 @@ export default function App() {
         <RIEDetail
           id={view.id}
           profile={profile}
+          autoSign={!!view.autoSign}
           onBack={() => setView({ page: 'dashboard' })}
           onEdit={(id) => setView({ page: 'edit', id })}
         />

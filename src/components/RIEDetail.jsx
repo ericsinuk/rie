@@ -32,7 +32,7 @@ const TIMELINE_STEPS = [
   { key: 'closed',  label: 'Closed',             statusMatch: s => s === 'Closed' },
 ]
 
-export default function RIEDetail({ id, profile, onBack, onEdit }) {
+export default function RIEDetail({ id, profile, onBack, onEdit, autoSign = false }) {
   const [rec, setRec] = useState(null)
   const [loading, setLoading] = useState(true)
   const [signing, setSigning] = useState(null)
@@ -54,6 +54,9 @@ export default function RIEDetail({ id, profile, onBack, onEdit }) {
     const { data } = await rie.get(id)
     setRec(data)
     setLoading(false)
+    if (autoSign && data?.status === 'Draft' && profile?.can_sign_applicant) {
+      setSigning('applicant')
+    }
   }
 
   async function handleSign(body) {
